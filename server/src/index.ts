@@ -16,10 +16,7 @@ if (process.env.NODE_ENV === "production") {
     throw new Error(
       "Production requires configured Resend HTTPS delivery or SMTP delivery.",
     );
-  if (
-    !process.env.PLATFORM_SUPPORT_EMAIL ||
-    !process.env.PLATFORM_OPERATOR_NAME
-  )
+  if (!process.env.PLATFORM_OPERATOR_NAME)
     throw new Error(
       "Production requires PLATFORM_OPERATOR_NAME for public privacy/support pages.",
     );

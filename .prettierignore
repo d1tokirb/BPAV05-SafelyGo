@@ -1,0 +1,9 @@
+node_modules
+**/node_modules
+**/dist
+**/android
+**/ios
+output
+tmp
+**/.mail
+**/.env*

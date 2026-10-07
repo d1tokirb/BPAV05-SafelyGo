@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: safelygo
+      POSTGRES_PASSWORD: local-development-only
+      POSTGRES_DB: safelygo
+    ports:
+      - "5433:5432"
+    volumes:
+      - safelygo_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safelygo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  safelygo_pg:

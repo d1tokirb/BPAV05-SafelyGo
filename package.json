@@ -1,0 +1,26 @@
+{
+  "name": "safelygo",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "npm --prefix mobile start",
+    "dev:api": "npm --prefix server run dev",
+    "dev:mobile": "npm --prefix mobile start",
+    "check": "npm --prefix server run check && npm --prefix mobile run check",
+    "test": "npm --prefix server test",
+    "build:api": "npm --prefix server run build",
+    "web": "npm --prefix mobile run web",
+    "release:check": "npm run check && npm --prefix mobile run lint && npm test && npm run build:api && npm --prefix mobile run export:all",
+    "deployment:check": "node scripts/check-deployment.mjs"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.4",
+    "prettier": "^3.9.9",
+    "typescript": "~6.0.3"
+  },
+  "dependencies": {
+    "expo": "~57.0.27",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
+  }
+}

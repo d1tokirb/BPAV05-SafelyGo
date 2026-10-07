@@ -1,0 +1,9 @@
+.git
+**/node_modules
+**/.env
+**/.env.*
+**/.mail
+mobile
+tmp
+output
+docs

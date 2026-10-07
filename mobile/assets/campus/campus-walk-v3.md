@@ -1,0 +1,7 @@
+# Ordinary campus image
+
+Saved asset: `mobile/assets/campus/campus-walk-v3.png`. Generated with the built-in imagegen tool in new-image mode. Illustrative campus context, not a participating-campus photograph. Replaces the glossy blue-hour image on Home and sign-in.
+
+## Final prompt
+
+Generate a normal, candid smartphone photograph of an everyday American university campus on an overcast afternoon. Wide horizontal 3:2 photo, eye-level, slightly off-center casual framing, ordinary unremarkable red-brown brick classroom buildings from the 1970s, a concrete sidewalk with faint cracks and discoloration, uneven grass, a few mature trees, a plain bicycle rack. One adult college student wearing a normal navy sweatshirt, jeans and a backpack walking away in the middle-right distance, not posing. Matte dry surfaces, soft flat cloudy daylight, modest natural colors, everyday phone-camera detail, slightly imperfect exposure. Looks like a regular student snapped a quick campus photo while walking to class, not an advertisement or architectural visualization. The student and walking path should remain within the middle horizontal band so they can fit a wide mobile banner crop. No shiny pavement, no rain, no dramatic lighting, no blue-hour lighting, no HDR, no cinematic grading, no luxurious glass buildings, no perfectly symmetric landscaping, no glossy surfaces, no bokeh, no neon, no orange graphic accents, no text, no logos, no UI, no watermarks. Prioritize believable ordinary reality over prettiness. Do not add dirt or danger for drama.

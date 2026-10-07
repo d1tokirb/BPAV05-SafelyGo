@@ -1,0 +1,7 @@
+# Editorial campus photograph
+
+`campus-path-v2.png` is decorative fictional campus photography generated with the built-in imagegen tool. It is bundled locally for offline display, hidden from screen readers, and never represents a participating institution or live campus conditions. It replaces the rejected miniature illustration.
+
+## Final generation prompt
+
+Use case: photorealistic-natural. Asset type: compact landscape photograph for the home screen of SafelyGo, a professional campus walk-sharing mobile app. Create an elegant editorial architectural photograph of a fictional university pedestrian path in early evening. Mature leafy trees, understated brick and stone academic buildings, soft warm lamps beside the path and a few warmly illuminated windows, natural landscaping, authentic life-sized architectural details. A gently curving path leads from foreground toward the buildings. No people, no dramatic danger, no cars, no phones, no location pin, no illustration, no miniature diorama, no 3D render, no logos, signage, or text. Sophisticated natural photographic style, subtle film grain, soft desaturated forest greens and warm stone, tranquil realistic lighting, inspired by a premium neighborhood lifestyle publication. Wide 3:2 landscape framing, clear quiet composition that reads well in a shallow mobile image crop. Keep important building details in the middle horizontal band, avoid a large empty sky. Photo only, no UI.

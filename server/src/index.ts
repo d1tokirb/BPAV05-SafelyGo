@@ -21,7 +21,7 @@ if (process.env.NODE_ENV === "production") {
     !process.env.PLATFORM_OPERATOR_NAME
   )
     throw new Error(
-      "Production requires PLATFORM_SUPPORT_EMAIL and PLATFORM_OPERATOR_NAME for public privacy/support pages.",
+      "Production requires PLATFORM_OPERATOR_NAME for public privacy/support pages.",
     );
 }
 if (process.env.NODE_ENV === "production") {

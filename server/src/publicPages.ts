@@ -17,7 +17,7 @@ export function registerPublicPages(app: Express) {
       const address = process.env.PLATFORM_SUPPORT_EMAIL || "";
       const contact = /^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/.test(address)
         ? `<a href="mailto:${escape(address)}">${escape(address)}</a>`
-        : "Support contact has not been configured. This deployment is not ready for public use.";
+        : `<a href="https://github.com/d1tokirb/BPAV05-SafelyGo/issues">Technical support on GitHub</a>. Issues are public: do not include personal information, passwords or verification codes. A private privacy-request channel has not been configured; account deletion is available in the app.`;
       const content =
         kind === "privacy"
           ? `

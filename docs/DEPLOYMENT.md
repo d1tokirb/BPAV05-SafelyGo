@@ -3,7 +3,7 @@
 ## Railway API + PostgreSQL
 
 1. Create a Railway project and add PostgreSQL.
-2. Add an API service from GitHub. Set Root Directory to `server` and Railway Config File to `/server/railway.json`. Railpack installs locked dependencies and builds the Node.js API. The mobile app is built separately.
+2. Add an API service from GitHub. Set Root Directory to `server` with Build Command `npm run build`, Start Command `npm start`, and Healthcheck Path `/health`. Railpack installs locked dependencies and builds the Node.js API. The mobile app is built separately.
 3. Set API variables:
    - DATABASE_URL: Railway reference to PostgreSQL's DATABASE_URL, using private networking when both services share the project.
    - NODE_ENV=production; Railway supplies PORT automatically.
@@ -78,3 +78,5 @@ Railway Free/Trial/Hobby blocks outbound SMTP; use the new HTTPS transport. Crea
 Set `PLATFORM_OPERATOR_NAME` to the actual responsible operator/business and `PLATFORM_SUPPORT_EMAIL` to a mailbox you monitor. The server hosts `/privacy` and `/support`, accessible from Account; use these public URLs in store listings. Review the actual backup lifecycle and campus retention practice before publishing. No support response time or fictional contact is promised.
 
 Sources: https://docs.railway.com/networking/outbound-networking and https://resend.com/pricing.
+
+Operator: Jonathon Hurdley. Support email is optional and intentionally unset for this deployment. Public technical support links to GitHub issues; never post private account details there. Railway now deprecates Config as Code for new services: configure build/start/health settings in the dashboard instead of adding a railway.json path.

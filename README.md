@@ -60,7 +60,7 @@ Development emails are written to `server/.mail/` with `MAIL_MODE=file`. Those f
 ## Deploy from GitHub to Railway
 
 1. Connect this GitHub repository to a Railway API service.
-2. Set **Root Directory** to `server` and **Railway Config File** to `/server/railway.json`.
+2. Set **Root Directory** to `server` and **Build Command** to `npm run build`, **Start Command** to `npm start`, and **Healthcheck Path** to `/health`.
 3. Add Railway PostgreSQL and reference its `DATABASE_URL` in the API service.
 4. Configure the production variables in [Release handoff](docs/RELEASE_HANDOFF.md).
 5. Generate the API's HTTPS domain, then set it as the Expo production `EXPO_PUBLIC_API_URL` before building the mobile app.
@@ -105,3 +105,5 @@ BPA release and AI documentation forms require human completion. No signed forms
 ## License
 
 No project-wide reuse license has been granted. Third-party code and assets retain their respective notices, including the Expo template notice in `mobile/LICENSE`.
+
+Operator: Jonathon Hurdley. Support email is optional and intentionally unset for this deployment. Public technical support links to GitHub issues; never post private account details there. Railway now deprecates Config as Code for new services: configure build/start/health settings in the dashboard instead of adding a railway.json path.

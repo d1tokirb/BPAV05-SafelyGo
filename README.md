@@ -106,4 +106,4 @@ BPA release and AI documentation forms require human completion. No signed forms
 
 No project-wide reuse license has been granted. Third-party code and assets retain their respective notices, including the Expo template notice in `mobile/LICENSE`.
 
-Operator: Jonathon Hurdley. Support email is optional and intentionally unset for this deployment. Public technical support links to GitHub issues; never post private account details there. Railway now deprecates Config as Code for new services: configure build/start/health settings in the dashboard instead of adding a railway.json path.
+Operator: Jonathon Hurdley. Private account, privacy and registration support: support@send.savely.help. The send.savely.help subdomain receives mail through Resend; monitor Emails → Receiving in the Resend dashboard. Public GitHub issues remain available for technical problems only; never post private account details there. Railway now deprecates Config as Code for new services: configure build/start/health settings in the dashboard instead of adding a railway.json path.

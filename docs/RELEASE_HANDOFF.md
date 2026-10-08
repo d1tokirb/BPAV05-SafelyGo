@@ -15,7 +15,7 @@ MAIL_MODE=resend
 RESEND_API_KEY=YOUR-RESEND-API-KEY
 MAIL_FROM=SafelyGo <YOUR-VERIFIED-SENDER>
 PLATFORM_OPERATOR_NAME=YOUR-OPERATOR-NAME
-PLATFORM_SUPPORT_EMAIL=YOUR-SUPPORT-EMAIL
+PLATFORM_SUPPORT_EMAIL=support@send.savely.help
 PLATFORM_OPERATOR_EMAILS=YOUR-VERIFIED-OPERATOR-EMAIL
 DEMO_LOGIN=false
 DEMO_SEED=false
@@ -69,10 +69,20 @@ Set `PLATFORM_OPERATOR_NAME` to the actual responsible operator/business and `PL
 
 Sources: https://docs.railway.com/networking/outbound-networking and https://resend.com/pricing.
 
-Operator: Jonathon Hurdley. Support email is optional and intentionally unset for this deployment. Public technical support links to GitHub issues; never post private account details there. Railway now deprecates Config as Code for new services: configure build/start/health settings in the dashboard instead of adding a railway.json path.
+Operator: Jonathon Hurdley. Private account, privacy and registration support: support@send.savely.help. The send.savely.help subdomain receives mail through Resend; monitor Emails → Receiving in the Resend dashboard. Public GitHub issues remain available for technical problems only; never post private account details there. Railway now deprecates Config as Code for new services: configure build/start/health settings in the dashboard instead of adding a railway.json path.
 
 ## October 8 release repair validation
 
 Signup email correction now requires the account password, invalidates previous codes, removes queued mail to the old address and revokes other sessions. Verified addresses cannot be changed through this endpoint. Staff sections and report filters are all visible without horizontal scrolling, and radio/tab selected states are exposed to screen readers. Public support guidance no longer asks people to put account emails in public issues.
 
 `npm run release:check` passed with 58 tests, type checking, lint, API compilation and iOS/Android/web exports. Browser checks verified corrected email verification, a real public campus address search, map boundary selection and staff navigation at phone dimensions. No physical-device background-location claim is implied by these results. API dependency audit: zero findings; mobile build tooling still has 19 high transitive findings without a safe SDK-compatible fix in the current audit.
+
+## Support email operations
+
+- Railway uses `PLATFORM_SUPPORT_EMAIL=support@send.savely.help`. The app’s hosted support/privacy pages read this setting, and transactional emails use it as their Reply-To address. No mobile rebuild is needed for this server setting.
+- Resend receiving is enabled for `send.savely.help`. Namecheap Custom MX: host `send`, value `inbound-smtp.us-east-1.amazonaws.com`, priority `10`, TTL Automatic. Sending DKIM and return-path records remain configured separately.
+- Review incoming requests in Resend → Emails → Receiving. Receiving is not forwarded to a personal mailbox. The operator must monitor the dashboard and handle requests; this setup does not promise automatic replies or an emergency response.
+- Replying through Resend uses its sending API with the received message’s Message-ID as the In-Reply-To header. Resend is an email service, not a full support ticket system. Never make received messages public through the dashboard’s sharing feature.
+- Validate receipt with a harmless test email to the support address after DNS verification. Check account recovery and deletion requests privately, and verify identity before making account changes.
+
+Provider instructions: https://resend.com/docs/dashboard/receiving/manage-emails and https://resend.com/docs/dashboard/receiving/reply-to-emails.

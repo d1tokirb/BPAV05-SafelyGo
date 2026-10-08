@@ -21,7 +21,8 @@
       "environment": "production",
       "env": {
         "SAFELYGO_RELEASE": "true",
-        "EXPO_PUBLIC_DEMO_LOGIN": "false"
+        "EXPO_PUBLIC_DEMO_LOGIN": "false",
+        "EXPO_PUBLIC_API_URL": "https://bpav05-safelygo-production.up.railway.app"
       }
     }
   },

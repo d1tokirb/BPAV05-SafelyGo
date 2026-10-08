@@ -1,10 +1,47 @@
 import Text from "../components/AppText";
 import React, { useState } from "react";
 import { View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { Button, Field, Heading, Notice, s, C, Chip } from "../components/ui";
+import {
+  Button,
+  Field,
+  Heading,
+  Notice,
+  s,
+  C,
+  Brand,
+  Reveal,
+  FocusPressable,
+} from "../components/ui";
 import { api, useAction } from "../state";
 import type { User } from "../types";
+function LinkButton({
+  title,
+  onPress,
+  disabled,
+}: {
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <FocusPressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      disabled={disabled}
+      onPress={onPress}
+      style={{
+        minHeight: 44,
+        paddingHorizontal: 4,
+        justifyContent: "center",
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <Text style={{ fontSize: 15, fontWeight: "700", color: C.blue }}>
+        {title}
+      </Text>
+    </FocusPressable>
+  );
+}
 export default function Auth({
   onLogin,
 }: {
@@ -37,17 +74,29 @@ export default function Auth({
   }
   return (
     <View style={s.page}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-          paddingVertical: 8,
-        }}
-      >
-        <Ionicons name="shield-checkmark" size={30} color={C.blue} />
-        <Text style={[s.subheading, { letterSpacing: -0.5 }]}>SafelyGo</Text>
-      </View>
+      <Reveal index={0}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            paddingTop: 16,
+            paddingBottom: 8,
+          }}
+        >
+          <Brand plain size={30} />
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: "800",
+              color: C.ink,
+              letterSpacing: -0.4,
+            }}
+          >
+            SafelyGo
+          </Text>
+        </View>
+      </Reveal>
       <Heading
         title={
           mode === "login"
@@ -178,30 +227,30 @@ export default function Auth({
           );
         }}
       />
-      <View style={s.row}>
+      <View style={[s.row, { gap: 20 }]}>
         {mode !== "login" && (
-          <Chip
+          <LinkButton
             title="Back to sign in"
             disabled={a.busy}
             onPress={() => changeMode("login")}
           />
         )}
         {mode === "login" && (
-          <Chip
+          <LinkButton
             title="New here? Sign up"
             disabled={a.busy}
             onPress={() => changeMode("register")}
           />
         )}
         {mode === "login" && (
-          <Chip
+          <LinkButton
             title="Forgot password?"
             disabled={a.busy}
             onPress={() => changeMode("forgot")}
           />
         )}
         {mode === "reset" && (
-          <Chip
+          <LinkButton
             title="Request a new code"
             disabled={a.busy}
             onPress={() => changeMode("forgot")}

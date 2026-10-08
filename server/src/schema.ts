@@ -42,4 +42,9 @@ CREATE TABLE contact_invitations(id uuid PRIMARY KEY,requester_id uuid NOT NULL 
     sql: `ALTER TABLE reports ADD COLUMN client_request_id uuid;
 CREATE UNIQUE INDEX report_request_identity ON reports(campus_id,author_id,client_request_id) WHERE client_request_id IS NOT NULL;`,
   },
+  {
+    version: 6,
+    sql: `CREATE TABLE geocoder_cache(key text PRIMARY KEY,results jsonb NOT NULL,expires_at timestamptz NOT NULL);
+CREATE INDEX geocoder_cache_expiry ON geocoder_cache(expires_at);`,
+  },
 ];

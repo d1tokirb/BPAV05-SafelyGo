@@ -19,6 +19,7 @@ import {
 } from "./security.js";
 import { enqueueMail } from "./mail.js";
 import { reviewCampus } from "./platform.js";
+import { searchPlaces } from "./geocoder.js";
 import type pg from "pg";
 
 type Identity = { id: string; name: string; email: string; verified: boolean };
@@ -104,9 +105,10 @@ app.use(helmet());
 app.use(
   cors({
     origin: (origin, cb) => {
-      const allowed = (
-        process.env.CORS_ORIGINS || "http://localhost:8081"
-      ).split(",").map((value) => value.trim()).filter(Boolean);
+      const allowed = (process.env.CORS_ORIGINS || "http://localhost:8081")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
       cb(null, !origin || allowed.includes(origin));
     },
   }),
@@ -263,7 +265,7 @@ app.post(
     const v = z.object({ email }).parse(req.body);
     await transaction(async (db) => {
       const r = await db.query(
-        "SELECT id,name,email,verified FROM users WHERE email=$1",
+        "SELECT id,name,email,verified FROM users WHERE email=$1 FOR UPDATE",
         [v.email],
       );
       if (r.rowCount) await createCode(db, r.rows[0], "reset");
@@ -281,6 +283,9 @@ app.post(
       .parse(req.body);
     const newHash = await hashPassword(v.password);
     const result = await transaction(async (db) => {
+      await db.query("SELECT id FROM users WHERE email=$1 FOR UPDATE", [
+        v.email,
+      ]);
       const r = await db.query(
         "SELECT c.* FROM auth_codes c JOIN users u ON u.id=c.user_id WHERE u.email=$1 AND c.purpose='reset' AND c.expires_at>now() FOR UPDATE OF c",
         [v.email],
@@ -359,10 +364,51 @@ app.post(
   }),
 );
 app.post(
+  "/api/auth/email",
+  route(async (req, res) => {
+    const v = z
+      .object({ email, password: z.string().min(1).max(128) })
+      .parse(req.body);
+    await countLimit(req, "email-correction", 5, 900);
+    await transaction(async (db) => {
+      const result = await db.query(
+        "SELECT * FROM users WHERE id=$1 FOR UPDATE",
+        [auth(req).user.id],
+      );
+      const user = result.rows[0];
+      if (!user) throw new HttpError(401, "Sign in again.");
+      if (user.verified)
+        throw new HttpError(409, "This email is already verified.");
+      if (!(await verifyPassword(v.password, user.password_hash)))
+        throw new HttpError(403, "Password is incorrect.");
+      await db.query("UPDATE users SET email=$1 WHERE id=$2", [
+        v.email,
+        user.id,
+      ]);
+      await db.query("DELETE FROM auth_codes WHERE user_id=$1", [user.id]);
+      await db.query("DELETE FROM mail_outbox WHERE recipient=$1", [
+        user.email,
+      ]);
+      await db.query(
+        "DELETE FROM sessions WHERE user_id=$1 AND token_hash<>$2",
+        [user.id, auth(req).sessionHash],
+      );
+      await createCode(db, { ...user, email: v.email }, "verify");
+    });
+    res.json({ message: "Verification code sent to your corrected email." });
+  }),
+);
+app.post(
   "/api/auth/resend",
   route(async (req, res) => {
-    if (!auth(req).user.verified)
-      await transaction((db) => createCode(db, auth(req).user, "verify"));
+    await transaction(async (db) => {
+      const result = await db.query(
+        "SELECT id,name,email,verified FROM users WHERE id=$1 FOR UPDATE",
+        [auth(req).user.id],
+      );
+      if (result.rowCount && !result.rows[0].verified)
+        await createCode(db, result.rows[0], "verify");
+    });
     res.json({ message: "Verification code sent." });
   }),
 );
@@ -371,6 +417,9 @@ app.post(
   route(async (req, res) => {
     const v = z.object({ code: z.string().regex(/^\d{8}$/) }).parse(req.body);
     const ok = await transaction(async (db) => {
+      await db.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
+        auth(req).user.id,
+      ]);
       const r = await db.query(
         "SELECT * FROM auth_codes WHERE user_id=$1 AND purpose='verify' AND expires_at>now() FOR UPDATE",
         [auth(req).user.id],
@@ -698,13 +747,31 @@ app.post(
       res.status(201).json(r.rows[0]);
       return;
     }
-    const prior = (await pool.query(
-      "SELECT * FROM reports WHERE campus_id=$1 AND author_id=$2 AND client_request_id=$3",
-      [auth(req).member.campus_id, auth(req).user.id, v.requestId],
-    )).rows[0];
-    if (!prior) throw new HttpError(409, "Report receipt could not be checked. Reconnect and open your reports before trying again.");
-    if (["title", "description", "category", "severity", "latitude", "longitude"].some((key) => prior[key] !== v[key as keyof typeof v]))
-      throw new HttpError(409, "This report was already received with different details. Save and close to view the report we received.");
+    const prior = (
+      await pool.query(
+        "SELECT * FROM reports WHERE campus_id=$1 AND author_id=$2 AND client_request_id=$3",
+        [auth(req).member.campus_id, auth(req).user.id, v.requestId],
+      )
+    ).rows[0];
+    if (!prior)
+      throw new HttpError(
+        409,
+        "Report receipt could not be checked. Reconnect and open your reports before trying again.",
+      );
+    if (
+      [
+        "title",
+        "description",
+        "category",
+        "severity",
+        "latitude",
+        "longitude",
+      ].some((key) => prior[key] !== v[key as keyof typeof v])
+    )
+      throw new HttpError(
+        409,
+        "This report was already received with different details. Save and close to view the report we received.",
+      );
     res.status(200).json(prior);
   }),
 );
@@ -966,88 +1033,12 @@ app.get(
     );
   }),
 );
-const placeCache = new Map<
-  string,
-  {
-    expires: number;
-    results: { name: string; latitude: number; longitude: number }[];
-  }
->();
 app.get(
   "/api/places",
   route(async (req, res) => {
     const query = z.string().trim().min(3).max(160).parse(req.query.q);
-    const provider = process.env.GEOCODER_SEARCH_URL;
-    if (!provider)
-      throw new HttpError(
-        503,
-        "Search is unavailable. Choose your campus on the map or use your location while on campus.",
-      );
-    const cached = placeCache.get(query.toLowerCase());
-    if (cached && cached.expires > Date.now()) {
-      res.json(cached.results);
-      return;
-    }
     await countLimit(req, "place-search", 15, 60);
-    const url = new URL(provider);
-    url.searchParams.set("q", query);
-    url.searchParams.set("format", "jsonv2");
-    url.searchParams.set("limit", "5");
-    let response: globalThis.Response;
-    try {
-      response = await fetch(url, {
-        headers: {
-          "User-Agent": "SafelyGo/1.0 Campus setup",
-          Accept: "application/json",
-        },
-        signal: AbortSignal.timeout(10000),
-      });
-    } catch {
-      throw new HttpError(
-        503,
-        "Campus search could not connect. Try again or choose the location on the map.",
-      );
-    }
-    if (!response.ok)
-      throw new HttpError(
-        503,
-        "Campus search is temporarily unavailable. You can choose the location on the map.",
-      );
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      throw new HttpError(
-        503,
-        "Campus search returned an unreadable response. Choose the location on the map.",
-      );
-    }
-    const places = z
-      .array(
-        z.object({
-          display_name: z.string().max(1000),
-          lat: z.coerce.number().min(-90).max(90),
-          lon: z.coerce.number().min(-180).max(180),
-        }),
-      )
-      .max(20)
-      .safeParse(body);
-    if (!places.success)
-      throw new HttpError(
-        503,
-        "Campus search returned an unreadable response. Choose the location on the map.",
-      );
-    const results = places.data.slice(0, 5).map((p) => ({
-      name: p.display_name,
-      latitude: p.lat,
-      longitude: p.lon,
-    }));
-    if (placeCache.size > 100) placeCache.clear();
-    placeCache.set(query.toLowerCase(), {
-      results,
-      expires: Date.now() + 86400000,
-    });
-    res.json(results);
+    res.json(await searchPlaces(query));
   }),
 );
 function isPlatformOperator(req: Request) {

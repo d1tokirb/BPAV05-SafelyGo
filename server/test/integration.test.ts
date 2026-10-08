@@ -91,7 +91,9 @@ async function campus(session: string, name: string, domain: string) {
 }
 before(async () => {
   await migrate();
-  await pool.query("TRUNCATE users,campuses,rate_limits CASCADE");
+  await pool.query(
+    "TRUNCATE users,campuses,rate_limits,geocoder_cache CASCADE",
+  );
 });
 after(async () => {
   await pool.end();
@@ -108,42 +110,45 @@ test("complete multi-campus service flows and security boundaries", async (t) =>
   let reportId = "";
   let contactId = "";
   let sessionId = "";
-  await t.test("activation, invitation codes and campus membership", async () => {
-    assert.equal(
-      (
-        await call("post", "/campuses/join", student.token, {
-          campusId: a.id,
-          joinCode: a.join_code,
-        })
-      ).status,
-      400,
-    );
-    await operator("approve", a.id, ...review);
-    await operator("approve", b.id, ...review);
-    assert.equal(
-      (
-        await call("post", "/campuses/join", stranger.token, {
-          campusId: a.id,
-          joinCode: "incorrect-code",
-        })
-      ).status,
-      400,
-    );
-    for (const u of [student, friend])
+  await t.test(
+    "activation, invitation codes and campus membership",
+    async () => {
       assert.equal(
         (
-          await call("post", "/campuses/join", u.token, {
+          await call("post", "/campuses/join", student.token, {
             campusId: a.id,
             joinCode: a.join_code,
           })
         ).status,
-        200,
+        400,
       );
-    assert.equal(
-      (await call("get", base + "/reports", otherOwner.token)).status,
-      403,
-    );
-  });
+      await operator("approve", a.id, ...review);
+      await operator("approve", b.id, ...review);
+      assert.equal(
+        (
+          await call("post", "/campuses/join", stranger.token, {
+            campusId: a.id,
+            joinCode: "incorrect-code",
+          })
+        ).status,
+        400,
+      );
+      for (const u of [student, friend])
+        assert.equal(
+          (
+            await call("post", "/campuses/join", u.token, {
+              campusId: a.id,
+              joinCode: a.join_code,
+            })
+          ).status,
+          200,
+        );
+      assert.equal(
+        (await call("get", base + "/reports", otherOwner.token)).status,
+        403,
+      );
+    },
+  );
   await t.test("report submission, location bounds and privacy", async () => {
     const input = {
       title: "Broken light",
@@ -357,18 +362,35 @@ test("complete multi-campus service flows and security boundaries", async (t) =>
       0,
     );
   });
-  await t.test("unknown location accuracy stays unknown for the recipient", async () => {
-    const result = await call("put", "/sharing/" + sessionId + "/location", student.token, {
-      latitude: 40.73, longitude: -73.99,
-    });
-    assert.equal(result.status, 200);
-    const incoming = (await call("get", "/sharing", friend.token)).body.incoming;
-    assert.equal(incoming[0].accuracy, null);
-    const invalid = await call("put", "/sharing/" + sessionId + "/location", student.token, {
-      latitude: 40.73, longitude: -73.99, accuracy: -1,
-    });
-    assert.equal(invalid.status, 400);
-  });
+  await t.test(
+    "unknown location accuracy stays unknown for the recipient",
+    async () => {
+      const result = await call(
+        "put",
+        "/sharing/" + sessionId + "/location",
+        student.token,
+        {
+          latitude: 40.73,
+          longitude: -73.99,
+        },
+      );
+      assert.equal(result.status, 200);
+      const incoming = (await call("get", "/sharing", friend.token)).body
+        .incoming;
+      assert.equal(incoming[0].accuracy, null);
+      const invalid = await call(
+        "put",
+        "/sharing/" + sessionId + "/location",
+        student.token,
+        {
+          latitude: 40.73,
+          longitude: -73.99,
+          accuracy: -1,
+        },
+      );
+      assert.equal(invalid.status, 400);
+    },
+  );
   await t.test("contact removal revokes access immediately", async () => {
     assert.equal(
       (await call("delete", "/contacts/" + contactId, friend.token)).status,
@@ -573,7 +595,7 @@ test("complete multi-campus service flows and security boundaries", async (t) =>
         email: "fresh@gamma.edu",
         password: pass,
       });
-      assert.equal(raw.status, 201);
+      assert.equal(raw.status, 201, JSON.stringify(raw.body));
       assert.equal(
         (await call("get", "/campuses", raw.body.token)).status,
         403,
@@ -1365,6 +1387,118 @@ test("complete multi-campus service flows and security boundaries", async (t) =>
     },
   );
   await t.test(
+    "unverified email correction requires password, replaces codes and revokes other sessions",
+    async () => {
+      const oldEmail = "typo@correction.example";
+      const newEmail = "correct@correction.example";
+      const registered = await call("post", "/auth/register", undefined, {
+        name: "Correction Test",
+        email: oldEmail,
+        password: pass,
+      });
+      assert.equal(registered.status, 201);
+      const session = registered.body.token;
+      const previousMail = await pool.query(
+        "SELECT body FROM mail_outbox WHERE recipient=$1",
+        [oldEmail],
+      );
+      const oldCode = previousMail.rows[0].body.match(/\b\d{8}\b/)[0];
+      const secondLogin = await call("post", "/auth/login", undefined, {
+        email: oldEmail,
+        password: pass,
+      });
+      assert.equal(secondLogin.status, 200);
+      assert.equal(
+        (
+          await call("post", "/auth/email", undefined, {
+            email: newEmail,
+            password: pass,
+          })
+        ).status,
+        401,
+      );
+      assert.equal(
+        (
+          await call("post", "/auth/email", session, {
+            email: newEmail,
+            password: "wrong",
+          })
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await call("post", "/auth/email", session, {
+            email: owner.user.email,
+            password: pass,
+          })
+        ).status,
+        409,
+      );
+      assert.equal(
+        (await call("get", "/me", session)).body.user.email,
+        oldEmail,
+      );
+      assert.equal(
+        (
+          await call("post", "/auth/email", session, {
+            email: newEmail,
+            password: pass,
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await call("get", "/me", session)).body.user.email,
+        newEmail,
+      );
+      assert.equal(
+        (await call("get", "/me", secondLogin.body.token)).status,
+        401,
+      );
+      assert.equal(
+        (
+          await pool.query("SELECT 1 FROM mail_outbox WHERE recipient=$1", [
+            oldEmail,
+          ])
+        ).rowCount,
+        0,
+      );
+      assert.equal(
+        (await call("post", "/auth/verify", session, { code: oldCode })).status,
+        400,
+      );
+      const newMail = await pool.query(
+        "SELECT body FROM mail_outbox WHERE recipient=$1",
+        [newEmail],
+      );
+      assert.equal(newMail.rowCount, 1);
+      const newCode = newMail.rows[0].body.match(/\b\d{8}\b/)[0];
+      assert.equal(
+        (await call("post", "/auth/verify", session, { code: newCode })).status,
+        200,
+      );
+      assert.equal(
+        (
+          await call("post", "/auth/email", session, {
+            email: oldEmail,
+            password: pass,
+          })
+        ).status,
+        409,
+      );
+      assert.equal(
+        (
+          await call("post", "/auth/login", undefined, {
+            email: oldEmail,
+            password: pass,
+          })
+        ).status,
+        401,
+      );
+    },
+  );
+  await t.test(
     "campus search uses configured provider and caches explicit searches",
     async () => {
       const previous = process.env.GEOCODER_SEARCH_URL;
@@ -1408,6 +1542,30 @@ test("complete multi-campus service flows and security boundaries", async (t) =>
           200,
         );
         assert.equal(requests, 1);
+        assert.equal(
+          (
+            await pool.query(
+              "SELECT 1 FROM geocoder_cache WHERE expires_at>now()",
+            )
+          ).rowCount,
+          1,
+        );
+        // An uncached search is throttled across users; cached results still work.
+        assert.equal(
+          (await call("get", "/places?q=Another%20campus", otherOwner.token))
+            .status,
+          429,
+        );
+        assert.equal(requests, 1);
+        await pool.query(
+          "UPDATE rate_limits SET reset_at=now()-interval '1 second' WHERE key='geocoder-global'",
+        );
+        assert.equal(
+          (await call("get", "/places?q=Another%20campus", otherOwner.token))
+            .status,
+          200,
+        );
+        assert.equal(requests, 2);
       } finally {
         await new Promise<void>((resolve) => provider.close(() => resolve()));
         if (previous === undefined) delete process.env.GEOCODER_SEARCH_URL;
@@ -1415,65 +1573,124 @@ test("complete multi-campus service flows and security boundaries", async (t) =>
       }
     },
   );
-  await t.test("report retries are atomic, immutable and scoped to their author", async () => {
-    const author = await register("owner@receipts.edu", "Receipt Owner");
-    const second = await register("student@receipts.edu", "Receipt Student");
-    const site = await campus(author.token, "Receipt Campus", "receipts.edu");
-    await operator("approve", site.id, ...review);
-    assert.equal((await call("post", "/campuses/join", second.token, {
-      campusId: site.id, joinCode: site.join_code,
-    })).status, 200);
-    const path = "/campuses/" + site.id + "/reports";
-    const input = { requestId: randomUUID(), title: "Broken campus light",
-      description: "Fictional acceptance report", category: "lighting",
-      severity: "medium", latitude: 40.73, longitude: -73.99 };
-    const results = await Promise.all([
-      call("post", path, author.token, input),
-      call("post", path, author.token, input),
-    ]);
-    assert.deepEqual(results.map(r => r.status).sort(), [200, 201]);
-    assert.equal(results[0].body.id, results[1].body.id);
-    const replay = await call("post", path, author.token, input);
-    assert.equal(replay.status, 200);
-    assert.equal(replay.body.id, results[0].body.id);
-    const changed = await call("post", path, author.token, {
-      ...input, description: "Changed after receipt",
-    });
-    assert.equal(changed.status, 409);
-    const isolated = await call("post", path, second.token, input);
-    assert.equal(isolated.status, 201);
-    assert.notEqual(isolated.body.id, results[0].body.id);
-    const stored = await pool.query(
-      "SELECT description FROM reports WHERE campus_id=$1 AND author_id=$2 AND client_request_id=$3",
-      [site.id, author.user.id, input.requestId],
-    );
-    assert.equal(stored.rowCount, 1);
-    assert.equal(stored.rows[0].description, input.description);
-  });
+  await t.test(
+    "report retries are atomic, immutable and scoped to their author",
+    async () => {
+      const author = await register("owner@receipts.edu", "Receipt Owner");
+      const second = await register("student@receipts.edu", "Receipt Student");
+      const site = await campus(author.token, "Receipt Campus", "receipts.edu");
+      await operator("approve", site.id, ...review);
+      assert.equal(
+        (
+          await call("post", "/campuses/join", second.token, {
+            campusId: site.id,
+            joinCode: site.join_code,
+          })
+        ).status,
+        200,
+      );
+      const path = "/campuses/" + site.id + "/reports";
+      const input = {
+        requestId: randomUUID(),
+        title: "Broken campus light",
+        description: "Fictional acceptance report",
+        category: "lighting",
+        severity: "medium",
+        latitude: 40.73,
+        longitude: -73.99,
+      };
+      const results = await Promise.all([
+        call("post", path, author.token, input),
+        call("post", path, author.token, input),
+      ]);
+      assert.deepEqual(results.map((r) => r.status).sort(), [200, 201]);
+      assert.equal(results[0].body.id, results[1].body.id);
+      const replay = await call("post", path, author.token, input);
+      assert.equal(replay.status, 200);
+      assert.equal(replay.body.id, results[0].body.id);
+      const changed = await call("post", path, author.token, {
+        ...input,
+        description: "Changed after receipt",
+      });
+      assert.equal(changed.status, 409);
+      const isolated = await call("post", path, second.token, input);
+      assert.equal(isolated.status, 201);
+      assert.notEqual(isolated.body.id, results[0].body.id);
+      const stored = await pool.query(
+        "SELECT description FROM reports WHERE campus_id=$1 AND author_id=$2 AND client_request_id=$3",
+        [site.id, author.user.id, input.requestId],
+      );
+      assert.equal(stored.rowCount, 1);
+      assert.equal(stored.rows[0].description, input.description);
+    },
+  );
 
-  await t.test("regular verified emails can join campuses using invitation codes", async () => {
-    const manager = await register("manager@personal.example.com");
-    const member = await register("student@personal.example.net");
-    const outsider = await register("outsider@personal.example.org");
-    const site = await campus(manager.token, "Regular Email Campus", "ordinary-campus.edu");
-    await operator("approve", site.id, ...review);
-    assert.equal((await call("post", "/campuses/join", member.token, {
-      campusId: site.id, joinCode: "wrong-code",
-    })).status, 400);
-    assert.equal((await call("post", "/campuses/join", member.token, {
-      campusId: site.id, joinCode: site.join_code,
-    })).status, 200);
-    assert.equal((await call("get", "/campuses/" + site.id + "/reports", member.token)).status, 200);
-    assert.equal((await call("get", "/campuses/" + site.id + "/reports", outsider.token)).status, 403);
-    assert.equal((await call("patch", "/campuses/" + site.id + "/members/" + manager.user.id,
-      member.token, {role:"staff"})).status, 403);
-    const unverified = await call("post", "/auth/register", undefined, {
-      email:"unverified@personal.example.net", name:"Unverified", password:pass,
-    });
-    assert.equal(unverified.status, 201);
-    assert.equal((await call("post", "/campuses/join", unverified.body.token, {
-      campusId: site.id, joinCode: site.join_code,
-    })).status, 403);
-  });
-
+  await t.test(
+    "regular verified emails can join campuses using invitation codes",
+    async () => {
+      const manager = await register("manager@personal.example.com");
+      const member = await register("student@personal.example.net");
+      const outsider = await register("outsider@personal.example.org");
+      const site = await campus(
+        manager.token,
+        "Regular Email Campus",
+        "ordinary-campus.edu",
+      );
+      await operator("approve", site.id, ...review);
+      assert.equal(
+        (
+          await call("post", "/campuses/join", member.token, {
+            campusId: site.id,
+            joinCode: "wrong-code",
+          })
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await call("post", "/campuses/join", member.token, {
+            campusId: site.id,
+            joinCode: site.join_code,
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await call("get", "/campuses/" + site.id + "/reports", member.token))
+          .status,
+        200,
+      );
+      assert.equal(
+        (await call("get", "/campuses/" + site.id + "/reports", outsider.token))
+          .status,
+        403,
+      );
+      assert.equal(
+        (
+          await call(
+            "patch",
+            "/campuses/" + site.id + "/members/" + manager.user.id,
+            member.token,
+            { role: "staff" },
+          )
+        ).status,
+        403,
+      );
+      const unverified = await call("post", "/auth/register", undefined, {
+        email: "unverified@personal.example.net",
+        name: "Unverified",
+        password: pass,
+      });
+      assert.equal(unverified.status, 201);
+      assert.equal(
+        (
+          await call("post", "/campuses/join", unverified.body.token, {
+            campusId: site.id,
+            joinCode: site.join_code,
+          })
+        ).status,
+        403,
+      );
+    },
+  );
 });

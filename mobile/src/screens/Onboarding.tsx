@@ -9,12 +9,19 @@ import {
   Pagination,
   Heading,
   Notice,
-  Card,
-  Chip,
+  Segmented,
+  ListGroup,
+  ActionRow,
+  EmptyState,
+  SectionLabel,
+  IconTile,
   s,
   Busy,
   Disclosure,
+  FocusPressable,
+  C,
 } from "../components/ui";
+import { Ionicons } from "@expo/vector-icons";
 import { useApp, useAction, usePaged, api } from "../state";
 import { locate } from "../location";
 import { useFormDraft } from "../useFormDraft";
@@ -25,25 +32,28 @@ import { websiteIdentity } from "../campusIdentity";
 export function Verification() {
   const { user, refresh, logout } = useApp();
   const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [correctedEmail, setCorrectedEmail] = useState(user.email);
   const a = useAction();
+  const fix = useAction();
   return (
     <View style={s.page}>
       <Heading
         title="Check your email"
         subtitle={
-          "We sent an 8-digit code to " +
+          "Enter the 8-digit code we sent to " +
           user.email +
-          ". Codes expire after 15 minutes."
+          ". It expires after 15 minutes."
         }
       />
       <Field
         label="Verification code"
         error={a.fields.code}
         value={code}
-        editable={!a.busy}
+        editable={!a.busy && !fix.busy}
         autoComplete="one-time-code"
         onChangeText={(value) => {
-          setCode(value);
+          setCode(value.replace(/\D/g, ""));
           a.clear();
         }}
         keyboardType="number-pad"
@@ -52,8 +62,8 @@ export function Verification() {
       {!!a.error && <Notice error message={a.error} />}
       {!!a.success && <Notice message={a.success} />}
       <Button
-        title="Verify email"
-        disabled={a.busy || !/^\d{8}$/.test(code)}
+        title={a.busy ? "Verifying…" : "Verify email"}
+        disabled={a.busy || fix.busy || !/^\d{8}$/.test(code)}
         onPress={() =>
           void a.run(async () => {
             await api.request("/auth/verify", "POST", { code });
@@ -61,19 +71,82 @@ export function Verification() {
           })
         }
       />
-      <Button
-        secondary
-        title="Send a new code"
-        disabled={a.busy}
-        onPress={() =>
-          void a.run(async () => {
-            await api.request("/auth/resend", "POST");
-            setCode("");
-          }, "New code sent.")
-        }
-      />
-      <Notice message="No email yet? Check Spam or Junk, confirm the address above, and request a fresh code. Only the newest code works." />
-      <Button secondary title="Sign out" onPress={() => void logout()} />
+      <Disclosure icon="mail-unread-outline" title="Didn’t get the code?">
+        <Text style={s.body}>
+          Check Spam or Junk and confirm the address above. Only the newest code
+          works.
+        </Text>
+        <Button
+          secondary
+          title="Send a new code"
+          disabled={a.busy || fix.busy}
+          onPress={() =>
+            void a.run(async () => {
+              await api.request("/auth/resend", "POST");
+              setCode("");
+            }, "New code sent.")
+          }
+        />
+      </Disclosure>
+      <Disclosure icon="create-outline" title="Wrong email address?">
+        <Text style={s.body}>
+          Correct your address and we’ll send a new code.
+        </Text>
+        <Field
+          label="Correct email address"
+          value={correctedEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          editable={!fix.busy}
+          error={fix.fields.email}
+          onChangeText={(value) => {
+            setCorrectedEmail(value);
+            fix.clear();
+          }}
+        />
+        <Field
+          label="Password for this account"
+          value={password}
+          secureTextEntry
+          editable={!fix.busy}
+          autoComplete="current-password"
+          error={fix.fields.password}
+          onChangeText={(value) => {
+            setPassword(value);
+            fix.clear();
+          }}
+        />
+        {!!fix.error && <Notice error message={fix.error} />}
+        {!!fix.success && <Notice message={fix.success} />}
+        <Button
+          secondary
+          title={fix.busy ? "Sending…" : "Update email and send code"}
+          disabled={fix.busy || a.busy || !password || !correctedEmail.trim()}
+          onPress={() =>
+            void fix.run(async () => {
+              await api.request("/auth/email", "POST", {
+                email: correctedEmail.trim(),
+                password,
+              });
+              setPassword("");
+              setCode("");
+              a.clear();
+              await refresh();
+            }, "New code sent. Check your corrected email address.")
+          }
+        />
+      </Disclosure>
+      <FocusPressable
+        accessibilityRole="button"
+        accessibilityLabel="Sign out"
+        onPress={() => void logout()}
+        style={{ minHeight: 44, justifyContent: "center", alignSelf: "center" }}
+      >
+        <Text style={{ fontSize: 14, fontWeight: "700", color: C.muted }}>
+          Sign out
+        </Text>
+      </FocusPressable>
     </View>
   );
 }
@@ -109,74 +182,64 @@ export default function Onboarding() {
     100,
   );
   if (!draft.ready) return <Busy />;
+  const hasSavedRegistration = !!name.trim();
+  const radiusKm = Number(radius) / 1000;
+  const radiusOptions = [
+    { key: "500", title: "0.5" },
+    { key: "1000", title: "1" },
+    { key: "1500", title: "1.5" },
+    { key: "3000", title: "3" },
+    { key: "5000", title: "5" },
+  ];
   return (
     <View style={s.page}>
       <Heading
         title={
           mode === "join"
             ? chosen
-              ? "Join your campus"
-              : "Find your campus"
+              ? "Enter your code"
+              : "Join your campus"
             : "Register a campus"
         }
         subtitle={
           mode === "join"
             ? chosen
-              ? "Enter the invitation code from your campus."
-              : "Search for your school, then select it to continue."
+              ? "Your campus issues this code. You can use your regular email."
+              : "Students join with an invitation code from their campus."
             : registrationStep === 0
-              ? "For authorized campus staff. Your campus will be reviewed before students can join."
+              ? "For authorized campus staff. Your campus is reviewed before students can join."
               : registrationStep === 1
-                ? "Find the campus and adjust its boundary."
+                ? "Search for the campus, then check the boundary."
                 : "Check the details before requesting approval."
         }
       />
-      {!campus && (
-        <Button
-          secondary
-          title="Here for a shared walk? Open Walk"
-          icon="people-outline"
-          onPress={() => router.navigate("/walk")}
-        />
-      )}
-      {((mode === "join" && !chosen) ||
-        (mode === "create" && registrationStep === 0)) && (
-        <View style={s.row}>
-          <Chip
-            title="Join a campus"
-            disabled={a.busy}
-            selected={mode === "join"}
-            onPress={() => {
-              setMode("join");
-              a.clear();
-            }}
-          />
-          <Chip
-            title="Register a campus (staff)"
-            disabled={a.busy}
-            selected={mode === "create"}
-            onPress={() => {
-              setMode("create");
-              a.clear();
-            }}
-          />
-        </View>
-      )}
-      {mode === "join" && !!name.trim() && (
-        <Button
-          secondary
-          title="Continue saved campus registration"
-          onPress={() => setMode("create")}
-        />
-      )}
       {mode === "join" ? (
         <>
           {!chosen && (
             <>
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: 12,
+                  padding: 14,
+                  borderRadius: 14,
+                  backgroundColor: C.mint,
+                }}
+              >
+                <Ionicons name="key-outline" size={22} color={C.blue} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={s.label}>You’ll need an invitation code</Text>
+                  <Text style={s.small}>
+                    1. Find your school below. 2. Enter the code from your
+                    safety office or student services. SafelyGo can’t issue it.
+                  </Text>
+                </View>
+              </View>
               <Field
-                label="Search campuses"
-                hint="Search by your school’s name."
+                label="Search for your campus"
                 value={query}
+                autoCapitalize="none"
+                placeholder="School name"
                 onChangeText={(value) => {
                   setQuery(value);
                   a.clear();
@@ -190,70 +253,137 @@ export default function Onboarding() {
                 />
               )}
               {campuses.loading && <Busy />}
-              {campuses.data.map((c) => (
-                <Card key={c.id}>
-                  <Text style={s.subheading}>{c.name}</Text>
-                  <Text style={s.body}>{c.domain}</Text>
-                  <Button
-                    secondary
-                    title="Select campus"
-                    onPress={() => {
-                      setChosenCampus(c);
-                      setJoinCode("");
-                      a.clear();
-                      scrollToTop();
-                    }}
-                  />
-                </Card>
-              ))}
+              {!!campuses.data.length && (
+                <ListGroup>
+                  {campuses.data.map((c, i) => (
+                    <ActionRow
+                      key={c.id}
+                      title={c.name}
+                      subtitle={c.domain}
+                      icon="school-outline"
+                      last={i === campuses.data.length - 1}
+                      onPress={() => {
+                        setChosenCampus(c);
+                        setJoinCode("");
+                        a.clear();
+                        scrollToTop();
+                      }}
+                    />
+                  ))}
+                </ListGroup>
+              )}
               <Pagination page={campuses} />
               {!campuses.loading &&
                 !campuses.error &&
                 !campuses.data.length && (
-                  <Notice message="No active campus matches this search. Try your school’s name, or ask its safety office to register with SafelyGo." />
+                  <EmptyState
+                    icon="search-outline"
+                    title={
+                      query.trim()
+                        ? "No active campus matches “" + query.trim() + "”"
+                        : "No active campuses yet"
+                    }
+                    body="Only approved campuses are listed. Check the spelling, or ask your school’s safety office to register with SafelyGo. Staff can register below."
+                  />
                 )}
-            </>
-          )}
-          {!!chosen && (
-            <>
-              <Card>
-                <Text style={s.subheading}>{chosenCampus!.name}</Text>
-                <Text style={s.body}>{chosenCampus!.domain}</Text>
-                <Button
-                  secondary
-                  title="Choose a different campus"
-                  disabled={a.busy}
+              <Disclosure
+                icon="help-circle-outline"
+                title="I can’t find my campus"
+              >
+                <Text style={s.body}>
+                  Your school may not be on SafelyGo yet. A campus must be
+                  registered by authorized staff and approved before students
+                  can join. Ask your safety office or student services whether
+                  it is joining.
+                </Text>
+              </Disclosure>
+              {!campus && (
+                <FocusPressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Invited to a shared walk? Open Walk"
+                  onPress={() => router.navigate("/walk")}
+                  style={{
+                    minHeight: 44,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Ionicons name="people-outline" size={18} color={C.blue} />
+                  <Text
+                    style={{ fontSize: 14, fontWeight: "700", color: C.blue }}
+                  >
+                    Invited to a shared walk? Open Walk
+                  </Text>
+                </FocusPressable>
+              )}
+              <View
+                style={{
+                  height: 1,
+                  backgroundColor: C.line,
+                  marginVertical: 4,
+                }}
+              />
+              <SectionLabel>For campus staff</SectionLabel>
+              <ListGroup>
+                <ActionRow
+                  title={
+                    hasSavedRegistration
+                      ? "Continue campus registration"
+                      : "Register a campus"
+                  }
+                  subtitle={
+                    hasSavedRegistration
+                      ? "Saved draft: " + name
+                      : "Authorized staff only. Reviewed before students can join."
+                  }
+                  icon="business-outline"
+                  last
                   onPress={() => {
-                    setChosenCampus(null);
-                    setJoinCode("");
+                    setMode("create");
                     a.clear();
                     scrollToTop();
                   }}
                 />
-              </Card>
-              <Text style={s.body}>
-                Your regular email works here. Use the invitation code your
-                school gave you.
-              </Text>
-              <Disclosure title="I don’t have an invitation code">
-                <Text style={s.body}>
-                  Ask your campus safety office or student services for the
-                  SafelyGo invitation code. Only your campus can issue it.
-                </Text>
-                {!!chosenCampus!.support_email && (
-                  <Button
-                    secondary
-                    title="Contact campus support"
-                    onPress={() =>
-                      void a.run(async () => {
-                        await Linking.openURL(
-                          "mailto:" + chosenCampus!.support_email,
-                        );
-                      })
-                    }
-                  />
-                )}
-              </Disclosure>
+              </ListGroup>
+            </>
+          )}
+          {!!chosen && (
+            <>
+              <ListGroup>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 14,
+                    padding: 16,
+                  }}
+                >
+                  <IconTile name="school-outline" />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={s.label}>{chosenCampus!.name}</Text>
+                    <Text style={s.small}>{chosenCampus!.domain}</Text>
+                  </View>
+                  <FocusPressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Choose a different campus"
+                    disabled={a.busy}
+                    onPress={() => {
+                      setChosenCampus(null);
+                      setJoinCode("");
+                      a.clear();
+                      scrollToTop();
+                    }}
+                    style={{ minHeight: 44, justifyContent: "center" }}
+                  >
+                    <Text
+                      style={{ fontSize: 14, fontWeight: "700", color: C.blue }}
+                    >
+                      Change
+                    </Text>
+                  </FocusPressable>
+                </View>
+              </ListGroup>
               <Field
                 label="Campus invitation code"
                 error={a.fields.joinCode}
@@ -265,6 +395,7 @@ export default function Onboarding() {
                 }}
                 autoCapitalize="none"
               />
+              {!!a.error && <Notice error message={a.error} />}
               <Button
                 title={a.busy ? "Joining campus…" : "Join campus"}
                 disabled={a.busy || !chosen || !joinCode.trim()}
@@ -279,14 +410,61 @@ export default function Onboarding() {
                   })
                 }
               />
+              <Disclosure
+                icon="help-circle-outline"
+                title="I don’t have an invitation code"
+              >
+                <Text style={s.body}>
+                  Ask your campus safety office or student services for the
+                  SafelyGo invitation code. Only your campus can issue it, and
+                  SafelyGo can’t create one for you.
+                </Text>
+                {!!chosenCampus!.support_email && (
+                  <Button
+                    secondary
+                    title="Email campus support"
+                    onPress={() =>
+                      void a.run(async () => {
+                        await Linking.openURL(
+                          "mailto:" + chosenCampus!.support_email,
+                        );
+                      })
+                    }
+                  />
+                )}
+              </Disclosure>
             </>
           )}
         </>
       ) : (
         <>
+          {registrationStep === 0 && (
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to student join"
+              disabled={a.busy}
+              onPress={() => {
+                setMode("join");
+                a.clear();
+                scrollToTop();
+              }}
+              style={{
+                minHeight: 44,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                alignSelf: "flex-start",
+              }}
+            >
+              <Ionicons name="chevron-back" size={20} color={C.blue} />
+              <Text style={{ fontSize: 15, fontWeight: "700", color: C.blue }}>
+                I’m a student
+              </Text>
+            </FocusPressable>
+          )}
           <StepProgress
             step={registrationStep}
-            labels={["Campus details", "Boundary", "Review"]}
+            labels={["Details", "Boundary", "Review"]}
           />
           {registrationStep === 0 && (
             <>
@@ -306,7 +484,7 @@ export default function Onboarding() {
                 autoCapitalize="none"
               />
               <Button
-                title="Continue to campus boundary"
+                title="Continue"
                 disabled={!name.trim() || !websiteIdentity(website)}
                 onPress={() => {
                   setRegistrationStep(1);
@@ -323,17 +501,12 @@ export default function Onboarding() {
                   setLongitude(String(lng));
                 }}
               />
-              <Text style={s.label}>Choose the campus center</Text>
-              <Text style={s.small}>
-                Move and zoom the map to your campus, then tap its center. You
-                can also use your location when you are on campus.
-              </Text>
               <SafetyMap
                 latitude={latitude ? Number(latitude) : 20}
                 longitude={longitude ? Number(longitude) : 0}
                 radius={latitude ? Number(radius) : 0}
                 zoom={latitude ? 15 : 2}
-                height={260}
+                height={280}
                 onSelect={(lat, lng) => {
                   setLatitude(String(lat));
                   setLongitude(String(lng));
@@ -351,9 +524,43 @@ export default function Onboarding() {
                     : []
                 }
               />
-              <Button
-                secondary
-                title="Use my location at campus"
+              <View
+                accessibilityLiveRegion="polite"
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 12,
+                  backgroundColor: latitude ? C.mint : "#EEF1F6",
+                }}
+              >
+                <Ionicons
+                  name={latitude ? "checkmark-circle" : "locate-outline"}
+                  size={20}
+                  color={latitude ? C.blue : C.muted}
+                />
+                <Text style={[s.small, { flex: 1, color: C.ink }]}>
+                  {latitude
+                    ? "Boundary set: " +
+                      radiusKm +
+                      " km around the selected point. Tap the map to move it."
+                    : "Search above, or tap the map to place the campus center."}
+                </Text>
+              </View>
+              <Segmented
+                label="Distance from center to campus edge in kilometers"
+                value={radius}
+                onChange={setRadius}
+                options={radiusOptions}
+              />
+              <Text style={[s.small, { textAlign: "center" }]}>
+                Distance from center to edge (km)
+              </Text>
+              <FocusPressable
+                accessibilityRole="button"
+                accessibilityLabel="Use my current location"
+                disabled={a.busy}
                 onPress={() =>
                   void a.run(async () => {
                     const p = await locate();
@@ -361,18 +568,21 @@ export default function Onboarding() {
                     setLongitude(String(p.coords.longitude));
                   })
                 }
-              />
-              <Text style={s.label}>Distance from center to campus edge</Text>
-              <View style={s.row}>
-                {[500, 1000, 1500, 3000, 5000].map((m) => (
-                  <Chip
-                    key={m}
-                    title={m < 1000 ? m + " m" : m / 1000 + " km"}
-                    selected={radius === String(m)}
-                    onPress={() => setRadius(String(m))}
-                  />
-                ))}
-              </View>
+                style={{
+                  minHeight: 44,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="navigate-outline" size={18} color={C.blue} />
+                <Text
+                  style={{ fontSize: 14, fontWeight: "700", color: C.blue }}
+                >
+                  I’m on campus now — use my location
+                </Text>
+              </FocusPressable>
               <Button
                 title="Review registration"
                 disabled={!latitude || !longitude}
@@ -399,19 +609,20 @@ export default function Onboarding() {
                   },
                 ]}
               />
-              <Card>
-                <Text style={s.subheading}>{name}</Text>
-                <Text style={s.small}>
-                  Website: {websiteIdentity(website)?.website || website}
-                </Text>
-                <Text style={s.small}>
-                  Campus boundary: {Number(radius) / 1000} km from the selected
-                  center
-                </Text>
-              </Card>
+              <ListGroup>
+                <View style={{ padding: 16, gap: 4 }}>
+                  <Text style={s.subheading}>{name}</Text>
+                  <Text style={s.small}>
+                    Website: {websiteIdentity(website)?.website || website}
+                  </Text>
+                  <Text style={s.small}>
+                    Boundary: {radiusKm} km from the selected center
+                  </Text>
+                </View>
+              </ListGroup>
               <Notice message="The platform operator will verify your institutional role before activating your campus. While waiting, you can add contacts and finish settings. You’ll receive email when a decision is made." />
               <Button
-                title="Register campus"
+                title={a.busy ? "Registering…" : "Register campus"}
                 disabled={a.busy}
                 onPress={() =>
                   void a.run(async () => {
@@ -447,7 +658,7 @@ export default function Onboarding() {
         </>
       )}
       {!!draft.error && <Notice error message={draft.error} />}
-      {!!a.error && <Notice error message={a.error} />}
+      {mode === "create" && !!a.error && <Notice error message={a.error} />}
     </View>
   );
 }

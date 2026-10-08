@@ -125,6 +125,8 @@ export function usePaged<T>(path: string, pageSize: number, interval = 0) {
 type Confirmation = {
   title: string;
   body: string;
+  confirmLabel?: string;
+  destructive?: boolean;
   resolve: (confirmed: boolean) => void;
 };
 let confirmationHandler: ((request: Confirmation) => void) | null = null;
@@ -133,10 +135,16 @@ export function registerConfirmation(
 ) {
   confirmationHandler = handler;
 }
-export function confirm(title: string, body: string): Promise<boolean> {
+export function confirm(
+  title: string,
+  body: string,
+  confirmLabel?: string,
+  destructive = false,
+): Promise<boolean> {
   return new Promise((resolve) => {
     if (!confirmationHandler) resolve(false);
-    else confirmationHandler({ title, body, resolve });
+    else
+      confirmationHandler({ title, body, confirmLabel, destructive, resolve });
   });
 }
 export { api, ApiError, storage };

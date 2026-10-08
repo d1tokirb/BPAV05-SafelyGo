@@ -21,6 +21,23 @@ test("public privacy and support pages include deletion help and escape operator
     else process.env.PLATFORM_OPERATOR_NAME = previous;
   }
 });
+test("public support never requests private information through GitHub", async () => {
+  const previous = process.env.PLATFORM_SUPPORT_EMAIL;
+  delete process.env.PLATFORM_SUPPORT_EMAIL;
+  try {
+    const app = express();
+    registerPublicPages(app);
+    const support = await request(app).get("/support").expect(200);
+    const privacy = await request(app).get("/privacy").expect(200);
+    assert.match(support.text, /Do not post your account email/);
+    assert.doesNotMatch(support.text, /include your account email/i);
+    assert.doesNotMatch(support.text, /contact support from your account email/i);
+    assert.match(privacy.text, /Public GitHub issues are for technical problems only/);
+  } finally {
+    if (previous === undefined) delete process.env.PLATFORM_SUPPORT_EMAIL;
+    else process.env.PLATFORM_SUPPORT_EMAIL = previous;
+  }
+});
 test("Resend sends over HTTPS with a stable retry id and propagates failures", async () => {
   const original = globalThis.fetch;
   const job = {

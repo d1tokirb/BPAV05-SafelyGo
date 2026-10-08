@@ -1,7 +1,7 @@
 import Text from "../components/AppText";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import { View, Linking } from "react-native";
+import { View, Linking, StyleSheet } from "react-native";
 import { API_URL } from "../api";
 import { Ionicons } from "@expo/vector-icons";
 import { draftStorage } from "../drafts";
@@ -9,6 +9,10 @@ import { useApp, useAction, useLoad, api, confirm } from "../state";
 import {
   Heading,
   SummaryRow,
+  ActionRow,
+  ListGroup,
+  SectionLabel,
+  Reveal,
   Field,
   Card,
   Button,
@@ -27,44 +31,54 @@ export default function Account({ onAddCampus }: { onAddCampus: () => void }) {
     { isOperator: false, supportEmail: "" },
   );
   const a = useAction();
+  const roleName = { student: "Student", staff: "Staff", owner: "Campus owner" };
+  const statusName = {
+    active: "Active",
+    pending: "Awaiting approval",
+    suspended: "Access paused",
+  };
   return (
     <View style={s.page}>
-      <Heading title="Your account" />
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 14,
-          paddingBottom: 8,
-        }}
-      >
-        <View
-          style={{
-            width: 58,
-            height: 58,
-            borderRadius: 20,
-            backgroundColor: C.navy,
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: C.white, fontSize: 25, fontWeight: "700" }}>
-            {user.name.slice(0, 1).toUpperCase()}
-          </Text>
+      <Heading title="Settings" />
+      <Reveal index={0}>
+        <View style={acct.profile}>
+          <View style={acct.avatar}>
+            <Text style={acct.avatarText}>
+              {user.name.slice(0, 1).toUpperCase()}
+            </Text>
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text numberOfLines={2} style={acct.name}>
+              {user.name}
+            </Text>
+            <Text numberOfLines={1} style={s.small}>
+              {user.email}
+            </Text>
+            {!!campus && (
+              <Text numberOfLines={1} style={[s.small, { color: C.blue }]}>
+                {roleName[campus.role]} · {campus.name}
+              </Text>
+            )}
+          </View>
         </View>
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text style={[s.label, { fontSize: 20 }]}>{user.name}</Text>
-          <Text style={s.small}>{user.email}</Text>
-        </View>
-      </View>
+      </Reveal>
+      {!!a.error && <Notice error message={a.error} />}
+      {!!a.success && <Notice message={a.success} />}
       {platform.data.isOperator && (
-        <Button
-          secondary
-          title="Platform campus review"
-          icon="shield-checkmark-outline"
-          onPress={() => router.navigate("/platform")}
-        />
+        <>
+          <SectionLabel>Platform</SectionLabel>
+          <ListGroup>
+            <ActionRow
+              last
+              icon="shield-checkmark-outline"
+              title="Platform campus review"
+              subtitle="Approve or reject campus requests"
+              onPress={() => router.navigate("/platform")}
+            />
+          </ListGroup>
+        </>
       )}
+      <SectionLabel>Profile</SectionLabel>
       <Disclosure icon="person-outline" title="Edit your name">
         <Card>
           <Field
@@ -85,90 +99,66 @@ export default function Account({ onAddCampus }: { onAddCampus: () => void }) {
           />
         </Card>
       </Disclosure>
-      <Disclosure icon="school-outline" title="Your campuses" initiallyOpen>
-        {campuses.map((c) => (
-          <Card key={c.id}>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
-            >
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 12,
-                  backgroundColor: C.mint,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <Ionicons name="school-outline" size={22} color={C.blue} />
-              </View>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={s.label}>{c.name}</Text>
-                <Text style={s.small}>
-                  {
-                    {
-                      student: "Student",
-                      staff: "Staff",
-                      owner: "Campus owner",
-                    }[c.role]
-                  }{" "}
-                  ·{" "}
-                  {
-                    {
-                      active: "Active",
-                      pending: "Awaiting approval",
-                      suspended: "Access paused",
-                    }[c.status]
-                  }
-                </Text>
-              </View>
-            </View>
-            {campus?.id === c.id ? (
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <Ionicons name="checkmark-circle" size={16} color={C.blue} />
-                <Text style={[s.small, { color: C.blue, fontSize: 13 }]}>
-                  Current campus
-                </Text>
-              </View>
-            ) : (
-              <Button
-                secondary={campus?.id !== c.id}
-                title={
-                  campus?.id === c.id
-                    ? "Current campus"
-                    : "Switch to this campus"
-                }
-                onPress={() => selectCampus(c.id)}
-              />
-            )}
-          </Card>
-        ))}
-        <Button
-          secondary
-          title="Join or register another campus"
+      <SectionLabel>Campuses</SectionLabel>
+      <ListGroup>
+        {campuses.map((c) => {
+          const current = campus?.id === c.id;
+          return (
+            <ActionRow
+              key={c.id}
+              icon="school-outline"
+              title={c.name}
+              subtitle={roleName[c.role] + " · " + statusName[c.status]}
+              selected={current}
+              onPress={() => {
+                if (!current) selectCampus(c.id);
+              }}
+              trailing={
+                current ? (
+                  <View style={acct.currentPill}>
+                    <Ionicons name="checkmark" size={14} color={C.blue} />
+                    <Text style={acct.currentText}>Current</Text>
+                  </View>
+                ) : (
+                  <Text style={acct.switchText}>Switch</Text>
+                )
+              }
+            />
+          );
+        })}
+        <ActionRow
+          last
+          icon="add-circle-outline"
+          title="Join or register a campus"
           onPress={onAddCampus}
         />
-      </Disclosure>
-      <Disclosure icon="lock-closed-outline" title="Privacy and safety">
-        <Button
-          secondary
-          title="Privacy notice"
+      </ListGroup>
+      <SectionLabel>Privacy and safety</SectionLabel>
+      <ListGroup>
+        <ActionRow
+          external
           icon="document-text-outline"
+          title="Privacy notice"
+          subtitle="Full policy, in your browser"
           onPress={() =>
             void a.run(() => Linking.openURL(API_URL + "/privacy"))
           }
         />
-        <Button
-          secondary
-          title="Support and deletion help"
+        <ActionRow
+          last
+          external
           icon="help-circle-outline"
+          title="Get support"
+          subtitle="Help if you can’t sign in or delete in the app"
           onPress={() =>
             void a.run(() => Linking.openURL(API_URL + "/support"))
           }
         />
+      </ListGroup>
+      <Disclosure
+        icon="information-circle-outline"
+        title="How SafelyGo uses your data"
+      >
         <Card>
           <SummaryRow
             icon="document-text-outline"
@@ -197,14 +187,18 @@ export default function Account({ onAddCampus }: { onAddCampus: () => void }) {
           />
         </Card>
       </Disclosure>
-      {!!a.error && <Notice error message={a.error} />}
-      {!!a.success && <Notice message={a.success} />}
-      <Button
-        secondary
-        title="Sign out and stop sharing"
-        onPress={() => void a.run(logout)}
-      />
-      <Disclosure icon="trash-outline" title="Delete your account">
+      <SectionLabel>Account</SectionLabel>
+      <ListGroup>
+        <ActionRow
+          last
+          icon="log-out-outline"
+          title="Sign out"
+          subtitle="Also stops any location sharing"
+          disabled={a.busy}
+          onPress={() => void a.run(logout)}
+        />
+      </ListGroup>
+      <Disclosure danger icon="trash-outline" title="Delete your account">
         <Card>
           <Text style={s.body}>
             Deletes your memberships, contacts and shared locations. Reports
@@ -246,6 +240,8 @@ export default function Account({ onAddCampus }: { onAddCampus: () => void }) {
                   await confirm(
                     "Delete your account permanently?",
                     "Your account cannot be recovered. Campus reports are retained without your account identity.",
+                    "Delete account",
+                    true,
                   )
                 ) {
                   await api.request("/me", "DELETE", { password });
@@ -267,7 +263,43 @@ export default function Account({ onAddCampus }: { onAddCampus: () => void }) {
           />
         </Card>
       </Disclosure>
-      <Text style={s.small}>SafelyGo 1.0 · Student Campus Safety App</Text>
+      <Text style={[s.small, { textAlign: "center", marginTop: 8 }]}>
+        SafelyGo 1.0 · Student Campus Safety App
+      </Text>
     </View>
   );
 }
+
+const acct = StyleSheet.create({
+  profile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.line,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: C.blue,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: { color: C.white, fontSize: 24, lineHeight: 30, fontWeight: "700" },
+  name: { fontSize: 18, lineHeight: 24, fontWeight: "700", color: C.ink },
+  currentPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: C.mint,
+  },
+  currentText: { fontSize: 12, fontWeight: "700", color: C.blue },
+  switchText: { fontSize: 14, fontWeight: "700", color: C.blue },
+});

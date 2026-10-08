@@ -39,7 +39,7 @@ const jobs = setInterval(async () => {
   try {
     await deliverMail();
     await pool.query(
-      "DELETE FROM sharing_sessions WHERE expires_at<now() OR stopped_at IS NOT NULL; DELETE FROM sessions WHERE expires_at<now(); DELETE FROM auth_codes WHERE expires_at<now(); DELETE FROM contact_invitations WHERE expires_at<now(); DELETE FROM rate_limits WHERE reset_at<now(); DELETE FROM mail_outbox WHERE created_at<now()-interval '1 day';",
+      "DELETE FROM sharing_sessions WHERE expires_at<now() OR stopped_at IS NOT NULL; DELETE FROM sessions WHERE expires_at<now(); DELETE FROM auth_codes WHERE expires_at<now(); DELETE FROM contact_invitations WHERE expires_at<now(); DELETE FROM rate_limits WHERE reset_at<now(); DELETE FROM geocoder_cache WHERE expires_at<now(); DELETE FROM mail_outbox WHERE created_at<now()-interval '1 day';",
     );
   } catch (e) {
     console.error("Maintenance failed", e instanceof Error ? e.message : e);

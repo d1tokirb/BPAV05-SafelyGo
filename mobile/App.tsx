@@ -30,8 +30,10 @@ import {
   Button,
   FocusPressable,
   Busy,
+  Brand,
   useReducedMotion,
 } from "./src/components/ui";
+import { ease } from "./src/components/motion";
 import type { User, Campus } from "./src/types";
 import ConfirmationHost from "./src/components/Confirmation";
 import Auth from "./src/screens/Auth";
@@ -47,6 +49,94 @@ const icons: Record<string, React.ComponentProps<typeof Ionicons>["name"]> = {
   Staff: "shield-outline",
   Account: "person-circle-outline",
 };
+const filled: Record<string, React.ComponentProps<typeof Ionicons>["name"]> = {
+  Home: "home",
+  Map: "map",
+  Reports: "flag",
+  Sharing: "people",
+  Help: "call",
+};
+function TabBar({
+  tabs,
+  active,
+  onSelect,
+}: {
+  tabs: string[];
+  active: string;
+  onSelect: (tab: string) => void;
+}) {
+  const [width, setWidth] = useState(0);
+  const reduced = useReducedMotion();
+  const x = useState(() => new Animated.Value(0))[0];
+  const placed = useRef(false);
+  const index = tabs.indexOf(active);
+  const slot = width ? (width - 16) / tabs.length : 0;
+  useEffect(() => {
+    if (!slot || index < 0) return;
+    if (reduced || !placed.current) {
+      placed.current = true;
+      x.setValue(index * slot);
+      return;
+    }
+    const animation = Animated.spring(x, {
+      toValue: index * slot,
+      speed: 18,
+      bounciness: 5,
+      useNativeDriver: Platform.OS !== "web",
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [index, slot, reduced, x]);
+  return (
+    <View
+      accessibilityRole="tablist"
+      accessibilityLabel="Main navigation"
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      style={styles.tabs}
+    >
+      {slot > 0 && index >= 0 && (
+        <Animated.View
+          aria-hidden
+          pointerEvents="none"
+          style={[
+            styles.indicator,
+            { width: slot - 12, transform: [{ translateX: x }] },
+          ]}
+        />
+      )}
+      {tabs.map((t) => {
+        const on = active === t;
+        return (
+          <FocusPressable
+            key={t}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            aria-selected={on}
+            accessibilityLabel={t === "Sharing" ? "Walk" : t}
+            onPress={() => onSelect(t)}
+            pressScale={0.92}
+            style={styles.tab}
+          >
+            <Ionicons
+              name={on ? filled[t] : icons[t]}
+              size={22}
+              color={on ? C.blue : C.muted}
+            />
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: on ? "700" : "600",
+                color: on ? C.blue : C.muted,
+              }}
+            >
+              {t === "Sharing" ? "Walk" : t}
+            </Text>
+          </FocusPressable>
+        );
+      })}
+    </View>
+  );
+}
 export default function App() {
   const [fontsReady, fontError] = useFonts({
     Manrope_400Regular,
@@ -55,7 +145,7 @@ export default function App() {
     Manrope_800ExtraBold,
   });
   const scroll = useRef<ScrollView>(null);
-  const fade = useRef(new Animated.Value(1)).current;
+  const fade = useState(() => new Animated.Value(1))[0];
   const reduceMotion = useReducedMotion();
   const scrollToTop = useCallback(() => {
     scroll.current?.scrollTo({ y: 0, animated: !reduceMotion });
@@ -91,18 +181,24 @@ export default function App() {
   };
   const [adding, setAdding] = useState(false);
   useEffect(() => {
-    if (reduceMotion || Platform.OS === "web") {
+    if (reduceMotion) {
       fade.setValue(1);
       return;
     }
     fade.setValue(0);
     const animation = Animated.timing(fade, {
       toValue: 1,
-      duration: 180,
-      useNativeDriver: true,
+      duration: 320,
+      easing: ease,
+      useNativeDriver: Platform.OS !== "web",
     });
     animation.start();
-    return () => animation.stop();
+    // Never leave a screen invisible if the animation frame loop is paused.
+    const failsafe = setTimeout(() => fade.setValue(1), 700);
+    return () => {
+      animation.stop();
+      clearTimeout(failsafe);
+    };
   }, [tab, adding, reduceMotion, fade]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -240,7 +336,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <SafeAreaView style={{ flex: 1, backgroundColor: C.sky }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: C.white }}>
         <StateContext.Provider
           value={{
             connectionError: error,
@@ -266,34 +362,22 @@ export default function App() {
                     flex: 1,
                   }}
                 >
-                  <View
-                    style={{
-                      width: 38,
-                      height: 42,
-                      borderRadius: 14,
-                      backgroundColor: C.blue,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Ionicons
-                      name="shield-checkmark"
-                      color={C.mint}
-                      size={23}
-                    />
-                  </View>
-                  <View style={{ flex: 1, gap: 3 }}>
+                  <Brand size={36} />
+                  <View style={{ flex: 1, gap: 1 }}>
                     <Text
                       style={{
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: "800",
                         color: C.ink,
-                        letterSpacing: -0.6,
+                        letterSpacing: -0.4,
                       }}
                     >
                       SafelyGo
                     </Text>
-                    <Text numberOfLines={1} style={[s.small, { fontSize: 12 }]}>
+                    <Text
+                      numberOfLines={1}
+                      style={[s.small, { fontSize: 12, lineHeight: 16 }]}
+                    >
                       {campus?.name || "Campus safety"}
                     </Text>
                   </View>
@@ -310,23 +394,35 @@ export default function App() {
                       <FocusPressable
                         accessibilityRole="button"
                         accessibilityLabel="Staff"
+                        accessibilityState={{ selected: tab === "Staff" }}
+                        hitSlop={4}
                         onPress={() => {
                           setAdding(false);
                           setTab("Staff");
                         }}
                         style={{
-                          minHeight: 48,
-                          minWidth: 48,
+                          height: 38,
+                          paddingHorizontal: 12,
+                          borderRadius: 19,
+                          flexDirection: "row",
                           alignItems: "center",
                           justifyContent: "center",
+                          gap: 6,
+                          backgroundColor: tab === "Staff" ? C.blue : C.mint,
                         }}
                       >
                         <Ionicons
-                          name="shield-outline"
-                          size={24}
-                          color={C.blue}
+                          name="shield-checkmark-outline"
+                          size={18}
+                          color={tab === "Staff" ? C.white : C.blue}
                         />
-                        <Text style={{ fontSize: 11, color: C.muted }}>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: "700",
+                            color: tab === "Staff" ? C.white : C.blue,
+                          }}
+                        >
                           Staff
                         </Text>
                       </FocusPressable>
@@ -335,41 +431,29 @@ export default function App() {
                       accessibilityRole="button"
                       accessibilityLabel="Account"
                       accessibilityState={{ selected: tab === "Account" }}
+                      hitSlop={4}
                       onPress={() => {
                         setAdding(false);
                         setTab("Account");
                       }}
-                      style={({ pressed }) => ({
-                        width: 54,
-                        minHeight: 54,
-                        gap: 3,
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 19,
                         alignItems: "center",
                         justifyContent: "center",
-                        opacity: pressed ? 0.6 : 1,
-                      })}
+                        backgroundColor: tab === "Account" ? C.blue : C.mint,
+                      }}
                     >
-                      <View
+                      <Text
                         style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 18,
-                          backgroundColor: tab === "Account" ? C.blue : C.mint,
-                          alignItems: "center",
-                          justifyContent: "center",
+                          fontSize: 16,
+                          lineHeight: 20,
+                          fontWeight: "700",
+                          color: tab === "Account" ? C.white : C.blue,
                         }}
                       >
-                        <Text
-                          style={{
-                            fontSize: 18,
-                            fontWeight: "700",
-                            color: tab === "Account" ? C.white : C.blue,
-                          }}
-                        >
-                          {user.name.slice(0, 1).toUpperCase()}
-                        </Text>
-                      </View>
-                      <Text style={{ fontSize: 11, color: C.muted }}>
-                        Account
+                        {user.name.slice(0, 1).toUpperCase()}
                       </Text>
                     </FocusPressable>
                   </View>
@@ -399,7 +483,20 @@ export default function App() {
                     />
                   </View>
                 )}
-                <Animated.View style={{ opacity: fade, flexGrow: 1 }}>
+                <Animated.View
+                  style={{
+                    opacity: fade,
+                    flexGrow: 1,
+                    transform: [
+                      {
+                        translateY: fade.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [10, 0],
+                        }),
+                      },
+                    ],
+                  }}
+                >
                   {content}
                   <View style={content ? { display: "none" } : { flexGrow: 1 }}>
                     <Slot />
@@ -408,60 +505,7 @@ export default function App() {
               </ScrollView>
             </KeyboardAvoidingView>
             {user?.verified && campus && !adding && (
-              <View
-                accessibilityRole="tablist"
-                accessibilityLabel="Main navigation"
-                style={styles.tabs}
-              >
-                {tabs.map((t) => (
-                  <FocusPressable
-                    key={t}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: tab === t }}
-                    aria-selected={tab === t}
-                    accessibilityLabel={t === "Sharing" ? "Walk" : t}
-                    onPress={() => setTab(t)}
-                    style={({ pressed }) => [
-                      styles.tab,
-                      {
-                        backgroundColor: pressed ? C.mint : "transparent",
-                      },
-                    ]}
-                  >
-                    <View
-                      style={{
-                        width: 48,
-                        height: 30,
-                        borderRadius: 15,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: tab === t ? C.mint : "transparent",
-                      }}
-                    >
-                      <Ionicons
-                        name={
-                          (tab === t
-                            ? icons[t].replace("-outline", "")
-                            : icons[t]) as React.ComponentProps<
-                            typeof Ionicons
-                          >["name"]
-                        }
-                        size={22}
-                        color={tab === t ? C.blue : C.muted}
-                      />
-                    </View>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: tab === t ? "700" : "500",
-                        color: tab === t ? C.blue : C.muted,
-                      }}
-                    >
-                      {t === "Sharing" ? "Walk" : t}
-                    </Text>
-                  </FocusPressable>
-                ))}
-              </View>
+              <TabBar tabs={tabs} active={tab} onSelect={setTab} />
             )}
           </View>
         </StateContext.Provider>
@@ -475,32 +519,42 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 760,
     alignSelf: "center",
-    backgroundColor: C.sky,
+    backgroundColor: C.bg,
   },
   header: {
-    minHeight: 72,
+    minHeight: 64,
     paddingHorizontal: 20,
     paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: C.sky,
+    backgroundColor: C.white,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line,
   },
   tabs: {
     flexDirection: "row",
     backgroundColor: C.white,
     paddingHorizontal: 8,
-    paddingTop: 7,
+    paddingTop: 6,
     paddingBottom: 6,
     borderTopWidth: 1,
     borderColor: C.line,
   },
+  indicator: {
+    position: "absolute",
+    top: 6,
+    left: 14,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: C.mint,
+  },
   tab: {
     flex: 1,
-    minHeight: 54,
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    borderRadius: 10,
+    gap: 3,
+    borderRadius: 16,
   },
 });

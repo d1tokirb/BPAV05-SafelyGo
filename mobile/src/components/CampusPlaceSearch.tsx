@@ -2,7 +2,7 @@ import Text from "./AppText";
 import React, { useState } from "react";
 import { View } from "react-native";
 import { api, useAction } from "../state";
-import { Button, Field, Notice, s } from "./ui";
+import { Button, Field, Notice, ListGroup, ActionRow, s } from "./ui";
 type Place = { name: string; latitude: number; longitude: number };
 export default function CampusPlaceSearch({
   onSelect,
@@ -16,7 +16,7 @@ export default function CampusPlaceSearch({
   return (
     <View style={{ gap: 12 }}>
       <Field
-        label="Find campus location"
+        label="Campus location"
         value={query}
         editable={!action.busy}
         onChangeText={(value) => {
@@ -25,11 +25,12 @@ export default function CampusPlaceSearch({
           setSearched(false);
           action.clear();
         }}
-        placeholder="Campus name, city or street address"
+        placeholder="Campus name and city"
+        hint="Search public campus addresses only."
       />
       <Button
         secondary
-        title={action.busy ? "Searching…" : "Search campus location"}
+        title={action.busy ? "Searching…" : "Search"}
         disabled={action.busy || query.trim().length < 3}
         onPress={() =>
           void action.run(async () => {
@@ -44,18 +45,23 @@ export default function CampusPlaceSearch({
         }
       />
       {!!action.error && <Notice error message={action.error} />}
-      {results.map((place, i) => (
-        <Button
-          key={i}
-          secondary
-          title={place.name}
-          onPress={() => {
-            onSelect(place.latitude, place.longitude);
-            setResults([]);
-            setSearched(false);
-          }}
-        />
-      ))}
+      {results.length > 0 && (
+        <ListGroup>
+          {results.map((place, i) => (
+            <ActionRow
+              key={i}
+              title={place.name}
+              icon="location-outline"
+              last={i === results.length - 1}
+              onPress={() => {
+                onSelect(place.latitude, place.longitude);
+                setResults([]);
+                setSearched(false);
+              }}
+            />
+          ))}
+        </ListGroup>
+      )}
       {searched && !results.length && (
         <Text style={s.small}>
           No matching campus found. Add its city or choose the location on the

@@ -21,7 +21,7 @@ DEMO_LOGIN=false
 DEMO_SEED=false
 ```
 
-The database service must actually be named Postgres for that reference. Select its DATABASE_URL using Railway's variable reference picker if it has another name. Use `DATABASE_SSL=true` when your database endpoint requires verified TLS. Railway supplies PORT. Generate a public HTTPS domain for the API and put it in PUBLIC_URL. For a native-only launch, leave CORS_ORIGINS empty; native requests do not send browser origins. Add the exact browser origin if hosting a web build. Campus discovery also requires a contracted geocoder's GEOCODER_SEARCH_URL; otherwise users can enter their campus location manually.
+The database service must actually be named Postgres for that reference. Select its DATABASE_URL using Railway's variable reference picker if it has another name. Use `DATABASE_SSL=true` when your database endpoint requires verified TLS. Railway supplies PORT. Generate a public HTTPS domain for the API and put it in PUBLIC_URL. For a native-only launch, leave CORS_ORIGINS empty; native requests do not send browser origins. Add the exact browser origin if hosting a web build. Campus address search requires GEOCODER_SEARCH_URL. This deployment uses https://nominatim.openstreetmap.org/search with the operator’s explicit approval for moderate use. Follow https://operations.osmfoundation.org/policies/nominatim/: no autocomplete or confidential queries, visible attribution, caching and a global maximum of one request per second. The server enforces a shared PostgreSQL cache (24 hours) and at most one upstream request per 1.1 seconds across replicas. Busy searches return a retry message. Switch GEOCODER_SEARCH_URL to a contracted or self-hosted compatible provider before larger-scale use. Map placement remains available if search fails.
 
 3. Deploy. Startup applies migrations with a PostgreSQL advisory lock before accepting traffic. `/health` checks the database. Configure separate continuous uptime monitoring, backups, and a restore rehearsal. Do not run the demo seed in this project.
 4. Run `npm run deployment:check -- https://YOUR-API-DOMAIN` for a read-only database health and disabled-test-login check. Check real SMTP delivery to two regular email accounts. Complete signup, campus application, operator approval, student join, report, staff update, contact invitation, walk sharing, and deletion against the deployed API. Inspect delivery failures in logs without exposing codes or credentials. Detailed campus operating commands are in DEPLOYMENT.md.
@@ -55,7 +55,7 @@ The database must be disposable and its name must end in `_test`; the suite clea
 - Published privacy/support pages, actual retention policy, App Store privacy and Google Play data safety declarations, screenshots and background-location review evidence matching the implemented behavior. Retained reports are anonymized on account deletion; do not promise that deletion erases them.
 - Review outstanding Expo tooling dependency advisories before building with untrusted inputs. The runtime API dependency audit is separate from mobile CLI dependencies.
 
-Exports and browser tests cannot certify native background execution or store approval. No Railway project or signed release was created during this local preparation.
+Exports and browser tests cannot certify native background execution or store approval. The Railway API and PostgreSQL are deployed; real Resend delivery to the operator’s test recipient has been confirmed. A signed native release has not yet been verified.
 
 ## Dependency audit (2026-10-07)
 
@@ -70,3 +70,9 @@ Set `PLATFORM_OPERATOR_NAME` to the actual responsible operator/business and `PL
 Sources: https://docs.railway.com/networking/outbound-networking and https://resend.com/pricing.
 
 Operator: Jonathon Hurdley. Support email is optional and intentionally unset for this deployment. Public technical support links to GitHub issues; never post private account details there. Railway now deprecates Config as Code for new services: configure build/start/health settings in the dashboard instead of adding a railway.json path.
+
+## October 8 release repair validation
+
+Signup email correction now requires the account password, invalidates previous codes, removes queued mail to the old address and revokes other sessions. Verified addresses cannot be changed through this endpoint. Staff sections and report filters are all visible without horizontal scrolling, and radio/tab selected states are exposed to screen readers. Public support guidance no longer asks people to put account emails in public issues.
+
+`npm run release:check` passed with 58 tests, type checking, lint, API compilation and iOS/Android/web exports. Browser checks verified corrected email verification, a real public campus address search, map boundary selection and staff navigation at phone dimensions. No physical-device background-location claim is implied by these results. API dependency audit: zero findings; mobile build tooling still has 19 high transitive findings without a safe SDK-compatible fix in the current audit.

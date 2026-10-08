@@ -1,51 +1,50 @@
 import Text from "./AppText";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Pressable,
   TextInput,
   StyleSheet,
+  Animated,
   ActivityIndicator,
-  AccessibilityInfo,
   Platform,
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Svg, { Circle } from "react-native-svg";
 import { useApp } from "../state";
 import GuideIcon, { type GuideKind } from "./GuideIcon";
+import { SpringPressable, useReducedMotion } from "./motion";
 export const C = {
-  blue: "#285CC4",
-  navy: "#18243B",
-  mint: "#EEF4FF",
-  accent: "#CBD7F1",
+  blue: "#1F58C7",
+  blueDark: "#173F94",
+  navy: "#0F1E3A",
+  mint: "#EAF1FD",
+  accent: "#C8D9F6",
   lavender: "#8D8CC2",
-  ink: "#18243B",
-  muted: "#56627A",
+  ink: "#0F1E3A",
+  muted: "#53607A",
   sky: "#FFFFFF",
   white: "#FFFFFF",
-  line: "#E9EDF4",
-  control: "#7A89A0",
+  bg: "#F4F6FA",
+  line: "#E1E7F0",
+  control: "#7D8BA3",
   red: "#B42335",
   green: "#167253",
   amber: "#8A5100",
 };
-export function useReducedMotion() {
-  const [reduced, setReduced] = useState(true);
-  useEffect(() => {
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReduced);
-    const listener = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      setReduced,
-    );
-    return () => listener.remove();
-  }, []);
-  return reduced;
+export { useReducedMotion, SpringPressable, Reveal, Pulse } from "./motion";
+// Focus rings should follow keyboard users, not mouse or touch taps on web.
+let keyboardMode = false;
+if (Platform.OS === "web" && typeof document !== "undefined") {
+  document.addEventListener("keydown", () => (keyboardMode = true), true);
+  document.addEventListener("pointerdown", () => (keyboardMode = false), true);
 }
 function useControlFocus(color = C.blue, inset = false) {
   const [focused, setFocused] = useState(false);
   return {
-    onFocus: () => setFocused(true),
+    onFocus: () => setFocused(Platform.OS !== "web" || keyboardMode),
     onBlur: () => setFocused(false),
     style: {
       outlineColor: color,
@@ -61,10 +60,13 @@ export function FocusPressable({
   onBlur,
   focusColor = C.blue,
   ...props
-}: React.ComponentProps<typeof Pressable> & { focusColor?: string }) {
+}: React.ComponentProps<typeof Pressable> & {
+  focusColor?: string;
+  pressScale?: number;
+}) {
   const focus = useControlFocus(focusColor, true);
   return (
-    <Pressable
+    <SpringPressable
       {...props}
       onFocus={(event) => {
         focus.onFocus();
@@ -102,7 +104,7 @@ export function Button({
 }) {
   const focus = useControlFocus(light ? C.accent : C.blue);
   return (
-    <Pressable
+    <SpringPressable
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityState={{ disabled }}
@@ -122,11 +124,14 @@ export function Button({
               : highlight
                 ? C.accent
                 : secondary
-                  ? C.white
-                  : C.blue,
-          borderWidth: secondary ? 1 : 0,
-          borderColor: danger ? C.red : C.control,
-          opacity: disabled ? 0.5 : pressed ? 0.8 : 1,
+                  ? pressed
+                    ? C.accent
+                    : C.mint
+                  : pressed
+                    ? C.blueDark
+                    : C.blue,
+          borderWidth: 0,
+          opacity: disabled ? 0.45 : 1,
         },
       ]}
     >
@@ -158,7 +163,7 @@ export function Button({
       >
         {title}
       </Text>
-    </Pressable>
+    </SpringPressable>
   );
 }
 export function Field({
@@ -172,12 +177,12 @@ export function Field({
   const eyeFocus = useControlFocus();
   return (
     <View style={{ gap: 7 }}>
-      <Text style={s.label}>{label}</Text>
+      <Text style={[s.label, { fontSize: 14 }]}>{label}</Text>
       <View style={{ position: "relative" }}>
         <TextInput
           accessibilityLabel={label}
           accessibilityHint={error || hint}
-          placeholderTextColor={C.muted}
+          placeholderTextColor="#7D8BA3"
           autoCorrect={
             props.keyboardType === "email-address" || props.secureTextEntry
               ? false
@@ -195,7 +200,12 @@ export function Field({
           }}
           style={[
             s.input,
-            focused && { borderColor: C.blue, backgroundColor: "#EEF5FB" },
+            focused && {
+              borderColor: C.blue,
+              borderWidth: 2,
+              paddingHorizontal: 13,
+              paddingVertical: 12,
+            },
             props.multiline && { minHeight: 105, textAlignVertical: "top" },
             props.secureTextEntry && { paddingRight: 62 },
             error && { borderColor: C.red },
@@ -203,7 +213,7 @@ export function Field({
           ]}
         />
         {props.secureTextEntry && (
-          <Pressable
+          <SpringPressable
             accessibilityRole="button"
             accessibilityLabel={visible ? "Hide password" : "Show password"}
             onPress={() => setVisible(!visible)}
@@ -225,7 +235,7 @@ export function Field({
               size={22}
               color={C.blue}
             />
-          </Pressable>
+          </SpringPressable>
         )}
       </View>
       {!!(error || hint) && (
@@ -307,7 +317,7 @@ export function StepProgress({
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor:
-                  index === current ? C.navy : index < current ? C.mint : C.sky,
+                  index === current ? C.blue : index < current ? C.mint : C.white,
               }}
             >
               {index < current ? (
@@ -346,15 +356,9 @@ export function SummaryRow({
   value: string;
 }) {
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-      <Ionicons
-        name={icon}
-        size={23}
-        color={C.blue}
-        accessible={false}
-        aria-hidden
-      />
-      <View style={{ flex: 1, gap: 3 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+      <IconTile name={icon} size={36} />
+      <View style={{ flex: 1, gap: 1 }}>
         <Text style={s.small}>{label}</Text>
         <Text style={s.label}>{value}</Text>
       </View>
@@ -378,7 +382,7 @@ export function ChoiceRow({
 }) {
   const focus = useControlFocus();
   return (
-    <Pressable
+    <SpringPressable
       accessibilityRole="checkbox"
       accessibilityLabel={title}
       accessibilityHint={subtitle}
@@ -396,9 +400,9 @@ export function ChoiceRow({
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: checked ? C.blue : "#DCE4F0",
+        borderRadius: 14,
+        borderWidth: checked ? 2 : 1,
+        borderColor: checked ? C.blue : C.line,
         backgroundColor: checked ? C.mint : C.white,
         opacity: disabled ? 0.5 : pressed ? 0.8 : 1,
       })}
@@ -445,7 +449,7 @@ export function ChoiceRow({
           color={checked ? C.blue : C.control}
         />
       )}
-    </Pressable>
+    </SpringPressable>
   );
 }
 export function Heading({
@@ -482,7 +486,10 @@ export function Notice({
       accessibilityLiveRegion="polite"
       style={[
         s.notice,
-        { backgroundColor: error ? "#FFF0F1" : C.sky, flexWrap: "wrap" },
+        {
+          backgroundColor: error ? "#FDECEE" : C.mint,
+          flexWrap: "wrap",
+        },
       ]}
     >
       <Ionicons
@@ -524,7 +531,7 @@ export function Chip({
 }) {
   const focus = useControlFocus();
   return (
-    <Pressable
+    <SpringPressable
       accessibilityRole={onPress ? "button" : "text"}
       accessibilityLabel={title}
       accessibilityState={{
@@ -546,9 +553,9 @@ export function Chip({
           flexDirection: "row",
           alignItems: "center",
           gap: 6,
-          backgroundColor: selected ? C.blue : C.sky,
+          backgroundColor: selected ? C.blue : onPress ? C.white : C.mint,
           borderWidth: 1,
-          borderColor: selected ? C.blue : onPress ? C.control : "transparent",
+          borderColor: selected ? C.blue : onPress ? "#C5CEDD" : "transparent",
           minHeight: onPress ? 44 : 30,
           paddingVertical: onPress ? 12 : 5,
           opacity: disabled ? 0.5 : 1,
@@ -568,7 +575,7 @@ export function Chip({
       >
         {title}
       </Text>
-    </Pressable>
+    </SpringPressable>
   );
 }
 export function Pagination({
@@ -621,18 +628,20 @@ export function Disclosure({
   initiallyOpen = false,
   compact = false,
   icon,
+  danger = false,
 }: {
   title: string;
   children: React.ReactNode;
   initiallyOpen?: boolean;
   compact?: boolean;
   icon?: React.ComponentProps<typeof Ionicons>["name"];
+  danger?: boolean;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
   const focus = useControlFocus();
   return (
     <View style={{ gap: 14 }}>
-      <Pressable
+      <SpringPressable
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={title}
@@ -642,36 +651,39 @@ export function Disclosure({
         onBlur={focus.onBlur}
         style={({ pressed }) => ({
           ...focus.style,
-          minHeight: compact ? 44 : 56,
-          paddingVertical: compact ? 10 : 16,
+          minHeight: compact ? 44 : 60,
+          paddingVertical: compact ? 6 : 10,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
           gap: 12,
           opacity: pressed ? 0.6 : 1,
-          backgroundColor: compact ? "transparent" : "#F5F7FB",
+          backgroundColor: compact ? "transparent" : C.white,
           borderRadius: 12,
-          paddingHorizontal: compact ? 0 : 18,
-          borderWidth: 0,
+          paddingHorizontal: compact ? 0 : 16,
+          borderWidth: compact ? 0 : 1,
           borderColor: C.line,
         })}
       >
-        {!!icon && (
-          <Ionicons
-            name={icon}
-            size={21}
-            color={C.blue}
-            accessible={false}
-            aria-hidden
-          />
-        )}
+        {!!icon &&
+          (compact ? (
+            <Ionicons
+              name={icon}
+              size={21}
+              color={C.blue}
+              accessible={false}
+              aria-hidden
+            />
+          ) : (
+            <IconTile name={icon} tone={danger ? "red" : "blue"} />
+          ))}
         <Text
           style={[
             s.label,
             {
               flex: 1,
-              fontSize: compact ? 14 : 16,
-              color: compact ? C.blue : C.ink,
+              fontSize: compact ? 14 : 15,
+              color: compact ? C.blue : danger ? C.red : C.ink,
             },
           ]}
         >
@@ -680,31 +692,61 @@ export function Disclosure({
         <Ionicons
           name={open ? "chevron-up" : "chevron-down"}
           size={20}
-          color={C.blue}
+          color={compact ? C.blue : C.muted}
         />
-      </Pressable>
+      </SpringPressable>
       {open ? children : null}
     </View>
   );
 }
+export function ListGroup({ children }: { children: React.ReactNode }) {
+  return (
+    <View
+      style={{
+        backgroundColor: C.white,
+        borderWidth: 1,
+        borderColor: C.line,
+        borderRadius: 14,
+        overflow: "hidden",
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+// One row in a ListGroup: icon tile, title, optional detail, trailing chevron.
 export function ActionRow({
   title,
   subtitle,
   icon,
   onPress,
   last = false,
+  danger = false,
+  selected,
+  trailing,
+  external = false,
+  disabled = false,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   icon: React.ComponentProps<typeof Ionicons>["name"];
   onPress: () => void;
   last?: boolean;
+  danger?: boolean;
+  selected?: boolean;
+  trailing?: React.ReactNode;
+  external?: boolean;
+  disabled?: boolean;
 }) {
   const focus = useControlFocus(C.blue, true);
   return (
-    <Pressable
+    <SpringPressable
       accessibilityRole="button"
       accessibilityLabel={title}
+      accessibilityHint={subtitle}
+      accessibilityState={{ selected, disabled }}
+      disabled={disabled}
+      pressScale={0.99}
       onPress={onPress}
       onFocus={focus.onFocus}
       onBlur={focus.onBlur}
@@ -712,58 +754,297 @@ export function ActionRow({
         ...focus.style,
         flexDirection: "row",
         alignItems: "center",
-        gap: 16,
-        padding: 18,
-        paddingHorizontal: 18,
-        backgroundColor: pressed ? "#EAF0F2" : "transparent",
+        gap: 14,
+        minHeight: 64,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        backgroundColor: pressed ? C.mint : C.white,
         borderBottomWidth: last ? 0 : 1,
-        borderColor: C.line,
+        borderBottomColor: C.line,
+        opacity: disabled ? 0.5 : 1,
       })}
     >
-      <View
-        style={{
-          width: 36,
-          height: 44,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Ionicons name={icon} size={24} color={C.blue} />
+      <IconTile name={icon} tone={danger ? "red" : "blue"} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[s.label, danger && { color: C.red }]}>{title}</Text>
+        {!!subtitle && <Text style={s.small}>{subtitle}</Text>}
       </View>
-      <View style={{ flex: 1, gap: 4 }}>
-        <Text style={s.label}>{title}</Text>
-        <Text style={s.small}>{subtitle}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color={C.muted} />
-    </Pressable>
+      {trailing ?? (
+        <Ionicons
+          name={external ? "open-outline" : "chevron-forward"}
+          size={external ? 18 : 20}
+          color={C.muted}
+        />
+      )}
+    </SpringPressable>
+  );
+}
+export function Brand({
+  size = 32,
+  plain = false,
+}: {
+  size?: number;
+  plain?: boolean;
+}) {
+  if (plain)
+    return (
+      <Ionicons
+        name="shield-checkmark"
+        size={size}
+        color={C.blue}
+        accessible={false}
+        aria-hidden
+      />
+    );
+  return (
+    <View
+      aria-hidden
+      style={{
+        width: size,
+        height: Math.round(size * 1.1),
+        borderRadius: 14,
+        backgroundColor: C.blue,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Ionicons
+        name="shield-checkmark"
+        size={Math.round(size * 0.6)}
+        color={C.mint}
+      />
+    </View>
+  );
+}
+// Concentric rings: a quiet reference to a location being shared.
+export function Rings({
+  size = 220,
+  opacity = 0.14,
+}: {
+  size?: number;
+  opacity?: number;
+}) {
+  return (
+    <View
+      aria-hidden
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        right: -size * 0.28,
+        top: -size * 0.22,
+        width: size,
+        height: size,
+      }}
+    >
+      <Svg width={size} height={size} viewBox="0 0 200 200">
+        {[24, 48, 72, 96].map((r) => (
+          <Circle
+            key={r}
+            cx={100}
+            cy={100}
+            r={r}
+            stroke="#fff"
+            strokeOpacity={opacity * (1.2 - r / 120)}
+            strokeWidth={1.5}
+            fill="none"
+          />
+        ))}
+      </Svg>
+    </View>
+  );
+}
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  disabled = false,
+  label,
+}: {
+  options: { key: T; title: string }[];
+  value: T;
+  onChange: (key: T) => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  const [width, setWidth] = useState(0);
+  const reduced = useReducedMotion();
+  const x = useState(() => new Animated.Value(0))[0];
+  const placed = useRef(false);
+  const index = Math.max(
+    0,
+    options.findIndex((o) => o.key === value),
+  );
+  const slot = width ? (width - 8) / options.length : 0;
+  useEffect(() => {
+    if (!slot) return;
+    if (reduced || !placed.current) {
+      placed.current = true;
+      x.setValue(index * slot);
+      return;
+    }
+    const animation = Animated.spring(x, {
+      toValue: index * slot,
+      speed: 22,
+      bounciness: 4,
+      useNativeDriver: Platform.OS !== "web",
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [index, slot, reduced, x]);
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={label}
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      style={{
+        flexDirection: "row",
+        padding: 4,
+        borderRadius: 14,
+        backgroundColor: "#E6ECF6",
+      }}
+    >
+      {slot > 0 && (
+        <Animated.View
+          aria-hidden
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 4,
+            left: 4,
+            width: slot,
+            height: 44,
+            borderRadius: 10,
+            backgroundColor: C.white,
+            borderWidth: 1,
+            borderColor: C.line,
+            transform: [{ translateX: x }],
+          }}
+        />
+      )}
+      {options.map((o) => (
+        <FocusPressable
+          key={o.key}
+          accessibilityRole="radio"
+          accessibilityLabel={o.title}
+          accessibilityState={{ checked: o.key === value, disabled }}
+          aria-checked={o.key === value}
+          aria-disabled={disabled}
+          disabled={disabled}
+          onPress={() => onChange(o.key)}
+          pressScale={0.97}
+          style={{
+            flex: 1,
+            minHeight: 44,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingHorizontal: 6,
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          <Text
+            numberOfLines={1}
+            style={{
+              fontSize: 14,
+              fontWeight: o.key === value ? "700" : "600",
+              color: o.key === value ? C.blue : C.muted,
+            }}
+          >
+            {o.title}
+          </Text>
+        </FocusPressable>
+      ))}
+    </View>
+  );
+}
+export function SectionLabel({ children }: { children: string }) {
+  return (
+    <Text
+      accessibilityRole="header"
+      style={{
+        fontSize: 13,
+        fontWeight: "700",
+        color: C.muted,
+        letterSpacing: 0.2,
+        marginTop: 8,
+        marginBottom: -4,
+      }}
+    >
+      {children}
+    </Text>
+  );
+}
+export function IconTile({
+  name,
+  tone = "blue",
+  size = 40,
+}: {
+  name: React.ComponentProps<typeof Ionicons>["name"];
+  tone?: "blue" | "solid" | "red";
+  size?: number;
+}) {
+  const bg = tone === "solid" ? C.blue : tone === "red" ? "#FDECEE" : C.mint;
+  const fg = tone === "solid" ? C.white : tone === "red" ? C.red : C.blue;
+  return (
+    <View
+      aria-hidden
+      accessible={false}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: Math.round(size * 0.3),
+        backgroundColor: bg,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Ionicons name={name} size={Math.round(size * 0.55)} color={fg} />
+    </View>
+  );
+}
+export function EmptyState({
+  icon,
+  title,
+  body,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  title: string;
+  body?: string;
+}) {
+  return (
+    <View style={{ alignItems: "center", gap: 10, paddingVertical: 28 }}>
+      <IconTile name={icon} size={52} />
+      <Text style={[s.label, { textAlign: "center" }]}>{title}</Text>
+      {!!body && <Text style={[s.small, { textAlign: "center" }]}>{body}</Text>}
+    </View>
   );
 }
 export const s = StyleSheet.create({
-  page: { gap: 18, padding: 20, paddingBottom: 36 },
+  page: { gap: 16, padding: 20, paddingBottom: 32 },
   heading: {
-    fontSize: 26,
-    lineHeight: 32,
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: "700",
     color: C.ink,
     letterSpacing: -0.3,
   },
   subheading: { fontSize: 20, fontWeight: "700", color: C.ink },
-  body: { fontSize: 16, lineHeight: 25, color: C.muted },
-  small: { fontSize: 14, lineHeight: 21, color: C.muted },
-  label: { fontSize: 16, fontWeight: "600", color: C.ink },
+  body: { fontSize: 15, lineHeight: 22, color: C.muted },
+  small: { fontSize: 13, lineHeight: 19, color: C.muted },
+  label: { fontSize: 15, fontWeight: "600", color: C.ink },
   input: {
     fontFamily: "Manrope_400Regular",
     backgroundColor: C.white,
     borderWidth: 1,
     borderColor: C.control,
-    borderRadius: 14,
-    padding: 14,
-    minHeight: 50,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    minHeight: 52,
     fontSize: 16,
     color: C.ink,
   },
   button: {
-    minHeight: 56,
+    minHeight: 52,
     borderRadius: 12,
     borderWidth: 0,
     alignItems: "center",
@@ -780,12 +1061,12 @@ export const s = StyleSheet.create({
     textAlign: "center",
   },
   card: {
-    backgroundColor: "#F5F7FB",
-    borderWidth: 0,
+    backgroundColor: C.white,
+    borderWidth: 1,
     borderColor: C.line,
-    borderRadius: 16,
-    padding: 18,
-    gap: 16,
+    borderRadius: 14,
+    padding: 16,
+    gap: 14,
   },
   notice: {
     borderRadius: 12,
@@ -798,7 +1079,7 @@ export const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     minHeight: 44,
-    borderRadius: 14,
+    borderRadius: 22,
   },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 9, alignItems: "center" },
   divider: { height: 1, backgroundColor: C.line, marginVertical: 5 },

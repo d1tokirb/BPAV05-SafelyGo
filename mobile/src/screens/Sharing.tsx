@@ -1,6 +1,7 @@
 import Text from "../components/AppText";
 import React, { useState, useEffect } from "react";
 import { View, Switch } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useApp, useLoad, useAction, api, ApiError, confirm } from "../state";
 import {
   Heading,
@@ -11,7 +12,11 @@ import {
   Field,
   Button,
   Notice,
-  Chip,
+  Segmented,
+  IconTile,
+  ListGroup,
+  SectionLabel,
+  FocusPressable,
   s,
   C,
   Disclosure,
@@ -37,11 +42,160 @@ function WalkSetupContainer({
   collapsed: boolean;
 }) {
   return collapsed ? (
-    <Disclosure title="Share my own walk">{children}</Disclosure>
+    <Disclosure icon="footsteps-outline" title="Share my own walk">
+      {children}
+    </Disclosure>
   ) : (
     <>{children}</>
   );
 }
+const initialsOf = (name: string) =>
+  name
+    .split(/[\s@]/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+
+type PillTone = "waiting" | "accepted" | "failed";
+function StatusPill({ tone, label }: { tone: PillTone; label: string }) {
+  const palette: Record<
+    PillTone,
+    {
+      bg: string;
+      fg: string;
+      border: string;
+      icon: React.ComponentProps<typeof Ionicons>["name"];
+    }
+  > = {
+    waiting: {
+      bg: C.white,
+      fg: C.muted,
+      border: "#C5CEDD",
+      icon: "time-outline",
+    },
+    accepted: {
+      bg: C.mint,
+      fg: C.blue,
+      border: C.mint,
+      icon: "checkmark-circle",
+    },
+    failed: {
+      bg: "#FDECEE",
+      fg: C.red,
+      border: "#FDECEE",
+      icon: "alert-circle",
+    },
+  };
+  const colors = palette[tone];
+  return (
+    <View
+      accessible
+      accessibilityLabel={"Status: " + label}
+      style={{
+        alignSelf: "flex-start",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 12,
+        borderWidth: 1,
+        backgroundColor: colors.bg,
+        borderColor: colors.border,
+      }}
+    >
+      <Ionicons name={colors.icon} size={13} color={colors.fg} />
+      <Text style={{ fontSize: 12, fontWeight: "700", color: colors.fg }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function PersonRow({
+  name,
+  detail,
+  tone,
+  status,
+  actions,
+  last,
+}: {
+  name: string;
+  detail?: string;
+  tone: PillTone;
+  status: string;
+  actions?: { title: string; onPress: () => void; disabled?: boolean }[];
+  last?: boolean;
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderBottomWidth: last ? 0 : 1,
+        borderBottomColor: C.line,
+      }}
+    >
+      <View
+        aria-hidden
+        accessible={false}
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: C.mint,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Text style={{ fontSize: 15, fontWeight: "700", color: C.blue }}>
+          {initialsOf(name)}
+        </Text>
+      </View>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text numberOfLines={1} style={s.label}>
+          {name}
+        </Text>
+        {!!detail && (
+          <Text numberOfLines={1} style={s.small}>
+            {detail}
+          </Text>
+        )}
+        <StatusPill tone={tone} label={status} />
+      </View>
+      {!!actions?.length && (
+        <View style={{ alignItems: "flex-end" }}>
+          {actions.map((action) => (
+            <FocusPressable
+              key={action.title}
+              accessibilityRole="button"
+              accessibilityLabel={action.title + " " + name}
+              disabled={action.disabled}
+              onPress={action.onPress}
+              style={{
+                minHeight: 44,
+                minWidth: 56,
+                alignItems: "flex-end",
+                justifyContent: "center",
+                opacity: action.disabled ? 0.5 : 1,
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "700", color: C.blue }}>
+                {action.title}
+              </Text>
+            </FocusPressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function SharingScreen() {
   const { user, scrollToTop } = useApp();
   const contacts = useLoad<TrustedContact[]>("/contacts", [], 10000);
@@ -101,36 +255,112 @@ export default function SharingScreen() {
   const pending = contacts.data.filter(
     (c) => c.status === "pending" && c.recipient_id === user.id,
   );
+  const waiting = contacts.data.filter(
+    (c) => c.status === "pending" && c.requester_id === user.id,
+  );
+  const inv = useAction();
+  const sendInvite = (address: string) =>
+    void inv.run(
+      async () => {
+        await api.request("/contacts", "POST", { email: address });
+        setEmail("");
+        await contacts.reload();
+      },
+      "Invitation sent to " + address + ".",
+    );
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const removeContact = (c: TrustedContact) =>
+    void a.run(async () => {
+      const isInvite = c.status === "pending";
+      if (
+        await confirm(
+          isInvite ? "Cancel this invitation?" : "Remove this contact?",
+          isInvite
+            ? c.other_name + " will no longer be able to accept it."
+            : "This immediately removes location access between you and " +
+                c.other_name +
+                ".",
+          isInvite ? "Cancel invitation" : "Remove contact",
+          true,
+        )
+      ) {
+        await api.request("/contacts/" + c.id, "DELETE");
+        await contacts.reload();
+        await sessions.reload();
+        setSelected(selected.filter((id) => id !== c.other_id));
+      }
+    });
+  const waitingRows = (
+    <ListGroup>
+      {waiting.map((c, i) => (
+        <PersonRow
+          key={c.id}
+          name={c.other_name}
+          detail={
+            c.recipient_id
+              ? c.other_email
+              : "Invited by email · no SafelyGo account yet"
+          }
+          tone="waiting"
+          status={c.recipient_id ? "Awaiting acceptance" : "Invited"}
+          last={i === waiting.length - 1}
+          actions={[
+            ...(!c.recipient_id
+              ? [
+                  {
+                    title: "Resend",
+                    disabled: inv.busy,
+                    onPress: () => sendInvite(c.other_email),
+                  },
+                ]
+              : []),
+            {
+              title: "Cancel",
+              disabled: a.busy,
+              onPress: () => removeContact(c),
+            },
+          ]}
+        />
+      ))}
+    </ListGroup>
+  );
   const inviteForm = (
     <Card>
       <Text style={s.subheading}>Invite someone you trust</Text>
-      <SummaryRow
-        icon="people-outline"
-        label="Choose a friend or family member"
-        value="They accept before you can share."
-      />
+      <Text style={s.small}>
+        They get an email and must accept in Walk before you can choose them.
+        Accepting does not start sharing.
+      </Text>
       <Field
         label="Their email address"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(value) => {
+          setEmail(value);
+          inv.clear();
+        }}
         autoCapitalize="none"
         keyboardType="email-address"
+        autoComplete="email"
       />
+      {!!inv.error && (
+        <Notice
+          error
+          message={"Invitation not sent. " + inv.error}
+          onRetry={
+            emailValid
+              ? () => sendInvite(email.trim().toLowerCase())
+              : undefined
+          }
+        />
+      )}
       <Button
-        title="Send invitation"
-        disabled={a.busy || !email.trim()}
-        onPress={() =>
-          void a.run(async () => {
-            await api.request("/contacts", "POST", {
-              email: email.trim().toLowerCase(),
-            });
-            setEmail("");
-            await contacts.reload();
-          }, "Invitation sent. They can accept it in Walk.")
-        }
+        title={inv.busy ? "Sending…" : "Send invitation"}
+        disabled={inv.busy || !emailValid}
+        onPress={() => sendInvite(email.trim().toLowerCase())}
       />
     </Card>
   );
+  const showInvites = !!pending.length && (!accepted.length || step === 0);
   if (!draft.ready) return <Busy />;
   return (
     <View style={s.page}>
@@ -140,7 +370,9 @@ export default function SharingScreen() {
             ? "Your shared walk"
             : pending.length || incoming.length
               ? "Walks & trusted people"
-              : "Share your walk"
+              : waiting.length && !accepted.length
+                ? "Invitation sent"
+                : "Share your walk"
         }
         subtitle={
           active
@@ -152,15 +384,21 @@ export default function SharingScreen() {
                 ? "Reconnect to check your walks and trusted people."
                 : pending.length
                   ? "Accept an invitation only if you know and trust the sender."
-                  : incoming.length
-                    ? "Someone you trust is sharing their walk with you."
-                    : !accepted.length
-                      ? "First, invite someone you trust."
-                      : [
-                          "Who should see your location?",
-                          "How long should sharing last?",
-                          "Check your choices before starting.",
-                        ][step]
+                  : waiting.length && !accepted.length
+                    ? "Waiting for " +
+                      (waiting.length === 1
+                        ? waiting[0].other_name
+                        : waiting.length + " people") +
+                      " to accept."
+                    : incoming.length
+                      ? "Someone you trust is sharing their walk with you."
+                      : !accepted.length
+                        ? "First, invite someone you trust."
+                        : [
+                            "Who should see your location?",
+                            "How long should sharing last?",
+                            "Check your choices before starting.",
+                          ][step]
         }
       />
 
@@ -168,6 +406,7 @@ export default function SharingScreen() {
       {!!trackingError && <Notice error message={trackingError} />}
       {!!a.error && <Notice error message={a.error} />}
       {!!a.success && <Notice message={a.success} />}
+      {!!inv.success && !!waiting.length && <Notice message={inv.success} />}
       {!!(sessions.error || contacts.error) && (
         <Notice
           error
@@ -228,8 +467,9 @@ export default function SharingScreen() {
           )}
         </Card>
       ))}
-      {pending.map((c) => (
-        <Card key={c.id}>
+      {(showInvites ? pending : []).map((c) => (
+        <Card key={c.id} style={{ borderColor: C.blue, borderWidth: 1.5 }}>
+          <StatusPill tone="waiting" label="Invitation received" />
           <Text style={s.label}>{c.other_name} invited you</Text>
           <Text style={s.body}>
             Accept to allow either of you to choose the other for a walk.
@@ -255,6 +495,8 @@ export default function SharingScreen() {
                   !(await confirm(
                     "Decline this invitation?",
                     "Neither of you will be able to select the other for a walk.",
+                    "Decline invitation",
+                    true,
                   ))
                 )
                   return;
@@ -277,7 +519,7 @@ export default function SharingScreen() {
           </Text>
         </Card>
       ) : active ? (
-        <Card style={{ borderColor: C.green }}>
+        <Card style={{ borderColor: C.blue, borderWidth: 1.5 }}>
           <Text style={s.subheading}>
             {activeStatus?.recent
               ? "Recent location received"
@@ -289,36 +531,50 @@ export default function SharingScreen() {
               message="Your contacts do not have a recent position. Keep SafelyGo open or reconnect location updates below."
             />
           )}
-          <Text style={s.body}>
-            {activeStatus?.minutesLeft} min left. Ends at{" "}
-            {new Date(active.expires_at).toLocaleTimeString([], {
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-            . Sharing with{" "}
-            {accepted
-              .filter((c) => active.recipients?.includes(c.other_id))
-              .map((c) => c.other_name)
-              .join(", ") || "your selected contacts"}
-            .
-          </Text>
-          <Text style={s.small}>
-            {active.updated_at
-              ? "Last position sent " +
-                new Date(active.updated_at).toLocaleTimeString()
-              : "Waiting for a position"}
-          </Text>
-          <Text style={s.small}>
-            {deviceTracking?.id === active.id
-              ? deviceTracking.background
-                ? "This device is sending background updates."
-                : "This device sends updates while SafelyGo stays open."
-              : "Location updates are not connected on this device."}
-          </Text>
-          <Text style={s.small}>
-            Use reconnect if this device stopped sending positions or you
-            reopened the app.
-          </Text>
+          <View style={{ gap: 14 }}>
+            <SummaryRow
+              icon="people-outline"
+              label="Sharing with"
+              value={
+                accepted
+                  .filter((c) => active.recipients?.includes(c.other_id))
+                  .map((c) => c.other_name)
+                  .join(", ") || "Your selected contacts"
+              }
+            />
+            <SummaryRow
+              icon="timer-outline"
+              label="Time left"
+              value={
+                activeStatus?.minutesLeft +
+                " min · ends " +
+                new Date(active.expires_at).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              }
+            />
+            <SummaryRow
+              icon="navigate-outline"
+              label="Last position sent"
+              value={
+                active.updated_at
+                  ? new Date(active.updated_at).toLocaleTimeString()
+                  : "Waiting for a position"
+              }
+            />
+            <SummaryRow
+              icon="phone-portrait-outline"
+              label="This device"
+              value={
+                deviceTracking?.id === active.id
+                  ? deviceTracking.background
+                    ? "Sending background updates"
+                    : "Sending while SafelyGo is open"
+                  : "Updates not connected"
+              }
+            />
+          </View>
           <Button
             secondary
             title="Reconnect location updates"
@@ -369,14 +625,50 @@ export default function SharingScreen() {
           />
         </Card>
       ) : !accepted.length ? (
-        pending.length ? (
-          <Disclosure title="Invite someone else">{inviteForm}</Disclosure>
+        waiting.length ? (
+          <>
+            <Card style={{ gap: 14 }}>
+              <View
+                style={{ flexDirection: "row", gap: 12, alignItems: "center" }}
+              >
+                <IconTile name="hourglass-outline" tone="solid" />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={s.subheading}>Waiting for acceptance</Text>
+                  <Text style={s.small}>
+                    {waiting.length === 1
+                      ? "1 invitation sent"
+                      : waiting.length + " invitations sent"}
+                  </Text>
+                </View>
+              </View>
+              <Text style={s.body}>
+                Next: ask them to open SafelyGo, go to Walk and tap Accept. You
+                can start a walk as soon as someone accepts. Nothing is shared
+                until you start a walk.
+              </Text>
+              <Button
+                secondary
+                title={contacts.loading ? "Checking…" : "Check for acceptance"}
+                disabled={contacts.loading}
+                icon="refresh"
+                onPress={() => void contacts.reload()}
+              />
+            </Card>
+            {waitingRows}
+            <Disclosure icon="person-add-outline" title="Invite someone else">
+              {inviteForm}
+            </Disclosure>
+          </>
+        ) : pending.length ? (
+          <Disclosure icon="person-add-outline" title="Invite someone else">
+            {inviteForm}
+          </Disclosure>
         ) : (
           inviteForm
         )
       ) : (
         <WalkSetupContainer collapsed={incoming.length > 0}>
-          <Card style={{ backgroundColor: C.white, padding: 0 }}>
+          <Card style={{ gap: 16 }}>
             {step > 0 && !chosen.length && (
               <>
                 <Notice message="Your saved selection is no longer available. Choose a trusted person to continue." />
@@ -435,16 +727,17 @@ export default function SharingScreen() {
                   Sharing stops automatically when this time runs out. You can
                   stop it sooner.
                 </Text>
-                <View style={s.row}>
-                  {[15, 30, 60, 120].map((n) => (
-                    <Chip
-                      key={n}
-                      title={n === 120 ? "2 hr" : n + " min"}
-                      selected={minutes === n}
-                      onPress={() => setMinutes(n)}
-                    />
-                  ))}
-                </View>
+                <Segmented
+                  label="Sharing duration"
+                  value={String(minutes)}
+                  onChange={(v) => setMinutes(Number(v))}
+                  options={[
+                    { key: "15", title: "15 min" },
+                    { key: "30", title: "30 min" },
+                    { key: "60", title: "1 hr" },
+                    { key: "120", title: "2 hr" },
+                  ]}
+                />
                 <Button title="Continue" onPress={() => setStep(2)} />
               </>
             )}
@@ -578,84 +871,69 @@ export default function SharingScreen() {
           )}
         </Disclosure>
       )}
-      {accepted.length > 0 && (
-        <Disclosure icon="person-add-outline" title="Invite another person">
-          {inviteForm}
-        </Disclosure>
+      {!active && !!accepted.length && step === 0 && (
+        <>
+          {!!waiting.length && (
+            <>
+              <SectionLabel>
+                {"Waiting for acceptance (" + waiting.length + ")"}
+              </SectionLabel>
+              {waitingRows}
+            </>
+          )}
+          <Disclosure icon="person-add-outline" title="Invite another person">
+            {inviteForm}
+          </Disclosure>
+          <Disclosure
+            icon="people-outline"
+            title={"Trusted people (" + accepted.length + ")"}
+          >
+            <ListGroup>
+              {accepted.map((c, i) => (
+                <PersonRow
+                  key={c.id}
+                  name={c.other_name}
+                  detail={c.other_email}
+                  tone="accepted"
+                  status="Trusted contact"
+                  last={i === accepted.length - 1}
+                  actions={[
+                    {
+                      title: "Remove",
+                      disabled: a.busy,
+                      onPress: () => removeContact(c),
+                    },
+                  ]}
+                />
+              ))}
+            </ListGroup>
+          </Disclosure>
+        </>
       )}
-      {contacts.data.some(
-        (c) => c.status === "accepted" || c.requester_id === user.id,
-      ) && (
+      {!!active && !!accepted.length && (
         <Disclosure
-          title={
-            "Manage trusted people (" +
-            contacts.data.length +
-            ")" +
-            (contacts.data.some(
-              (c) => c.status === "pending" && c.recipient_id === user.id,
-            )
-              ? " · New invitation"
-              : "")
-          }
+          icon="people-outline"
+          title={"Trusted people (" + accepted.length + ")"}
         >
-          {contacts.data
-            .filter(
-              (c) => c.status === "accepted" || c.requester_id === user.id,
-            )
-            .map((c) => (
-              <Card key={c.id}>
-                <Text style={s.label}>{c.other_name}</Text>
-                <Text style={s.small}>{c.other_email}</Text>
-                <Chip
-                  title={
-                    c.status === "accepted"
-                      ? "Trusted contact"
-                      : c.recipient_id === user.id
-                        ? "Invitation received"
-                        : "Waiting for acceptance"
-                  }
-                />
-                {c.status === "pending" && c.recipient_id === user.id && (
-                  <Button
-                    title="Accept trusted contact"
-                    disabled={a.busy}
-                    onPress={() =>
-                      void a.run(async () => {
-                        await api.request(
-                          "/contacts/" + c.id + "/accept",
-                          "POST",
-                        );
-                        await contacts.reload();
-                      })
-                    }
-                  />
-                )}
-                <Button
-                  secondary
-                  title={
-                    c.status === "pending"
-                      ? "Decline / cancel invitation"
-                      : "Remove trusted contact"
-                  }
-                  disabled={a.busy}
-                  onPress={() =>
-                    void a.run(async () => {
-                      if (
-                        await confirm(
-                          "Remove this contact?",
-                          "This immediately removes location access between you.",
-                        )
-                      ) {
-                        await api.request("/contacts/" + c.id, "DELETE");
-                        await contacts.reload();
-                        await sessions.reload();
-                        setSelected(selected.filter((id) => id !== c.other_id));
-                      }
-                    })
-                  }
-                />
-              </Card>
+          <ListGroup>
+            {accepted.map((c, i) => (
+              <PersonRow
+                key={c.id}
+                name={c.other_name}
+                detail={c.other_email}
+                tone="accepted"
+                status="Trusted contact"
+                last={i === accepted.length - 1}
+                actions={[
+                  {
+                    title: "Remove",
+                    disabled: a.busy,
+                    onPress: () => removeContact(c),
+                  },
+                ]}
+              />
             ))}
+          </ListGroup>
         </Disclosure>
       )}
     </View>

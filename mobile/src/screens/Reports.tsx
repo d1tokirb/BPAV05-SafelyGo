@@ -2,6 +2,7 @@ import Text from "../components/AppText";
 import { router, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import React, { useState, useEffect } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { View, useWindowDimensions } from "react-native";
 import { useApp, useAction, usePaged, api, confirm } from "../state";
 import {
@@ -16,7 +17,8 @@ import {
   Chip,
   s,
   Busy,
-  Disclosure,
+  ListGroup,
+  EmptyState,
   C,
 } from "../components/ui";
 import GuideIcon, { type GuideKind } from "../components/GuideIcon";
@@ -26,6 +28,136 @@ import { draftStorage } from "../drafts";
 import { isNearCampus } from "../reportLocation";
 import { locate } from "../location";
 import type { Report } from "../types";
+const REPORT_STATE: Record<string, string> = {
+  submitted: "Received",
+  reviewing: "Staff reviewing",
+  resolved: "Resolved",
+  dismissed: "Closed",
+};
+function ReportRow({
+  report: r,
+  categoryName,
+  last,
+}: {
+  report: Report;
+  categoryName: string;
+  last: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const closed = r.status === "resolved" || r.status === "dismissed";
+  return (
+    <View
+      style={{
+        borderBottomWidth: last ? 0 : 1,
+        borderBottomColor: C.line,
+      }}
+    >
+      <FocusPressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          r.title + ", " + (REPORT_STATE[r.status] || r.status)
+        }
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen(!open)}
+        style={({ pressed }) => ({
+          minHeight: 68,
+          paddingVertical: 12,
+          paddingHorizontal: 16,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+          backgroundColor: pressed ? C.mint : C.white,
+        })}
+      >
+        <View
+          aria-hidden
+          accessible={false}
+          style={{
+            width: 40,
+            height: 40,
+            backgroundColor: closed ? "#EEF1F6" : C.mint,
+            borderRadius: 12,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <GuideIcon
+            kind={
+              (r.category in CATEGORY_KINDS ? r.category : "other") as GuideKind
+            }
+            color={closed ? C.muted : C.blue}
+            size={24}
+          />
+        </View>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text numberOfLines={2} style={s.label}>
+            {r.title}
+          </Text>
+          <Text numberOfLines={1} style={s.small}>
+            <Text
+              style={{
+                fontWeight: "700",
+                color: closed ? C.muted : C.blue,
+              }}
+            >
+              {REPORT_STATE[r.status] || r.status}
+            </Text>
+            {" · " +
+              new Date(r.created_at).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
+          </Text>
+        </View>
+        <Ionicons
+          name={open ? "chevron-up" : "chevron-down"}
+          size={18}
+          color={C.muted}
+        />
+      </FocusPressable>
+      {open && (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 16, gap: 10 }}>
+          <ReportStatus status={r.status} />
+          <Text style={s.small}>{categoryName}</Text>
+          <Text style={s.body}>{r.description}</Text>
+          {!!r.public_summary && (
+            <>
+              <Text style={s.label}>Staff’s public update</Text>
+              <Text style={s.body}>{r.public_summary}</Text>
+            </>
+          )}
+          <Text style={s.small}>
+            Sent{" "}
+            {new Date(r.created_at).toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+            {r.updated_at !== r.created_at
+              ? " · Updated " +
+                new Date(r.updated_at).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : ""}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+const CATEGORY_KINDS: Record<string, true> = {
+  lighting: true,
+  hazard: true,
+  suspicious: true,
+  harassment: true,
+  theft: true,
+  other: true,
+};
 export default function Reports() {
   const { width, fontScale } = useWindowDimensions();
   const verticalChoices = width < 360 || fontScale > 1.2;
@@ -169,7 +301,7 @@ export default function Reports() {
         />
       )}
       {form && (
-        <Card style={{ backgroundColor: C.white, padding: 0 }}>
+        <Card style={{ gap: 16 }}>
           {!!a.error && <Notice error message={a.error} />}
           <StepProgress
             step={step}
@@ -493,6 +625,8 @@ export default function Reports() {
                 !(await confirm(
                   "Discard your draft?",
                   "Your unfinished report will be removed from this device.",
+                  "Discard draft",
+                  true,
                 ))
               )
                 return;
@@ -527,89 +661,24 @@ export default function Reports() {
       {!form && (
         <>
           {!reports.loading && !reports.error && !reports.data.length && (
-            <Text style={s.body}>
-              No reports yet. If something needs attention, send your first
-              concern.
-            </Text>
+            <EmptyState
+              icon="flag-outline"
+              title="No reports yet"
+              body="If something needs attention, send your first concern. Only you and campus staff see the full report."
+            />
           )}
-          {reports.data.map((r) => (
-            <Card
-              key={r.id}
-              style={{
-                backgroundColor: C.white,
-                borderWidth: 1,
-                borderColor: C.line,
-                padding: 16,
-                gap: 10,
-              }}
-            >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
-              >
-                <View
-                  style={{
-                    width: 42,
-                    height: 42,
-                    backgroundColor: C.mint,
-                    borderRadius: 12,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <GuideIcon
-                    kind={
-                      (r.category in categoryNames
-                        ? r.category
-                        : "other") as GuideKind
-                    }
-                    color={C.blue}
-                    size={26}
-                  />
-                </View>
-                <Text
-                  style={[s.label, { flex: 1, fontSize: 18, lineHeight: 25 }]}
-                >
-                  {r.title}
-                </Text>
-              </View>
-              <ReportStatus status={r.status} compact />
-              <Disclosure compact title="View report details">
-                <ReportStatus status={r.status} />
-                <Text style={s.small}>
-                  {categoryNames[r.category] || r.category}
-                </Text>
-                <Text style={s.body}>{r.description}</Text>
-                {r.public_summary && (
-                  <>
-                    <Text style={s.label}>Staff’s public update</Text>
-                    <Text style={s.body}>{r.public_summary}</Text>
-                  </>
-                )}
-                {r.updated_at !== r.created_at && (
-                  <Text style={s.small}>
-                    Last updated{" "}
-                    {new Date(r.updated_at).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </Text>
-                )}
-              </Disclosure>
-              <Text style={[s.small, { fontSize: 12 }]}>
-                Sent{" "}
-                {new Date(r.created_at).toLocaleString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </Text>
-            </Card>
-          ))}
+          {!!reports.data.length && (
+            <ListGroup>
+              {reports.data.map((r, i) => (
+                <ReportRow
+                  key={r.id}
+                  report={r}
+                  categoryName={categoryNames[r.category] || r.category}
+                  last={i === reports.data.length - 1}
+                />
+              ))}
+            </ListGroup>
+          )}
           <Pagination page={reports} />
         </>
       )}

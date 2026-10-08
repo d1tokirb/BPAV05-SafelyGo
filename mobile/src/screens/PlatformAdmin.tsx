@@ -200,6 +200,7 @@ export default function PlatformAdmin() {
                   !(await confirm(
                     "Save this campus decision?",
                     "This changes access for the institution and emails its owner. Your review reason is recorded.",
+                    "Save decision",
                   ))
                 )
                   return;

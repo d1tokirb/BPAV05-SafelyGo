@@ -4,13 +4,16 @@ import { View, StyleSheet, useWindowDimensions } from "react-native";
 import { useApp, useLoad } from "../state";
 import {
   Card,
-  Button,
   Notice,
   FocusPressable,
   Disclosure,
+  IconTile,
+  Rings,
+  SectionLabel,
   s,
   C,
-  Busy,
+  Pulse,
+  Reveal,
 } from "../components/ui";
 import { walkStatus } from "../walkStatus";
 import SafetyMap from "../components/SafetyMap";
@@ -64,14 +67,15 @@ export default function Home({
   const currentAlerts = alerts.data.filter(
     (alert) => Date.parse(alert.expires_at) > now,
   );
+  const walkLive = !!activeWalk;
+  const loadingHome = alerts.loading && sharing.loading;
   return (
-    <View style={[s.page, { gap: 16 }]}>
-      <View style={home.greeting}>
+    <View style={s.page}>
+      <Reveal index={0} style={home.greeting}>
         <Text accessibilityRole="header" style={home.title}>
-          {"Hi, " + user.name.split(" ")[0] + "."}
+          {"Hi, " + user.name.split(" ")[0]}
         </Text>
-        <Text style={s.body}>Choose what you need.</Text>
-      </View>
+      </Reveal>
       {campus!.status !== "active" && (
         <Notice
           message={
@@ -84,19 +88,30 @@ export default function Home({
         />
       )}
       {incoming.length > 0 && (
-        <Card style={{ borderLeftWidth: 3, borderLeftColor: C.blue }}>
-          <Text style={s.label}>
-            {incoming.map((w) => w.owner_name || "A trusted person").join(", ")}{" "}
-            {incoming.length === 1 ? "is" : "are"} sharing with you
-          </Text>
-          <Button
-            secondary
-            title="View shared walks"
+        <Reveal index={1}>
+          <FocusPressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              incoming
+                .map((w) => w.owner_name || "A trusted person")
+                .join(", ") +
+              (incoming.length === 1 ? " is" : " are") +
+              " sharing with you. View shared walks."
+            }
             onPress={() => navigate("Sharing")}
-          />
-        </Card>
+            style={home.incoming}
+          >
+            <View style={home.liveDot} />
+            <Text style={[s.label, { flex: 1 }]} numberOfLines={2}>
+              {incoming
+                .map((w) => w.owner_name || "A trusted person")
+                .join(", ")}{" "}
+              {incoming.length === 1 ? "is" : "are"} sharing with you
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color={C.blue} />
+          </FocusPressable>
+        </Reveal>
       )}
-      {alerts.loading && <Busy />}
       {!!(alerts.error || sharing.error) && (
         <Notice
           error
@@ -107,48 +122,63 @@ export default function Home({
           }}
         />
       )}
-      <FocusPressable
-        accessibilityRole="button"
-        focusColor={C.blue}
-        accessibilityLabel={activeWalk ? "Open your walk" : "Share a walk"}
-        accessibilityHint="Choose who sees your location and for how long."
-        onPress={() => navigate("Sharing")}
-        style={({ pressed }) => [
-          home.walkAction,
-          narrow && { padding: 14, gap: 10 },
-          { opacity: pressed ? 0.88 : 1 },
-        ]}
-      >
-        <View style={[home.walkIcon, narrow && { width: 44, height: 44 }]}>
-          <Ionicons name="footsteps-outline" size={32} color={C.white} />
-        </View>
-        <View style={{ flex: 1, gap: 5 }}>
-          <Text
-            style={[home.walkTitle, narrow && { fontSize: 18, lineHeight: 25 }]}
-          >
-            {activeWalk ? "Your shared walk" : "Share a walk"}
-          </Text>
-          <Text style={home.walkHint}>
-            {activeWalk ? "Manage your sharing" : "Choose people. Set a time."}
-          </Text>
-        </View>
-        <View style={[home.walkArrow, narrow && { width: 36, height: 36 }]}>
-          <Ionicons name="arrow-forward" size={22} color={C.white} />
-        </View>
-      </FocusPressable>
-      <View style={home.actionGrid}>
+      <Reveal index={1}>
+        <FocusPressable
+          accessibilityRole="button"
+          focusColor={C.white}
+          accessibilityLabel={
+            walkLive ? "Open your shared walk" : "Share a walk"
+          }
+          accessibilityHint="Choose who sees your location and for how long."
+          onPress={() => navigate("Sharing")}
+          pressScale={0.98}
+          style={[home.hero, narrow && { padding: 18 }]}
+        >
+          <Rings size={narrow ? 200 : 240} />
+          <View style={home.heroTop}>
+            <View style={home.heroIcon}>
+              <Ionicons name="footsteps" size={22} color={C.white} />
+            </View>
+            {walkLive && (
+              <View style={home.livePill}>
+                <View style={[home.liveDot, { backgroundColor: C.white }]} />
+                <Text style={home.livePillText}>Sharing now</Text>
+              </View>
+            )}
+          </View>
+          <View style={{ gap: 4 }}>
+            <Text style={home.heroTitle}>
+              {walkLive ? "Your shared walk" : "Share a walk"}
+            </Text>
+            <Text style={home.heroHint}>
+              {walkLive
+                ? "See who can follow you and stop any time."
+                : "Pick trusted people and a time limit. Nothing is shared until you confirm."}
+            </Text>
+          </View>
+          <View style={home.heroCta}>
+            <Text style={home.heroCtaText}>
+              {walkLive ? "Manage walk" : "Start"}
+            </Text>
+            <Ionicons name="arrow-forward" size={18} color={C.blue} />
+          </View>
+        </FocusPressable>
+      </Reveal>
+      <Reveal index={2} style={home.actionGrid}>
         {[
           {
             title: "Report a concern",
             hint: "Tell campus staff",
-            icon: "flag-outline" as const,
+            icon: "flag" as const,
             route: "Reports",
+            tone: "blue" as const,
           },
           {
             title: "Get help",
-            hint: "Find someone to call",
-            icon: "call-outline" as const,
+            hint: "Call someone now",
+            icon: "call" as const,
             route: "Help",
+            tone: "red" as const,
           },
         ].map((action) => (
           <FocusPressable
@@ -156,30 +186,24 @@ export default function Home({
             accessibilityRole="button"
             accessibilityLabel={action.title}
             onPress={() => navigate(action.route)}
-            style={({ pressed }) => [
-              home.utilityAction,
-              action.route === "Help" && home.helpAction,
-              { opacity: pressed ? 0.8 : 1 },
-            ]}
+            style={home.tile}
           >
-            <View style={home.utilityIcon}>
-              <Ionicons name={action.icon} size={30} color={C.blue} />
+            <IconTile name={action.icon} tone={action.tone} />
+            <View style={{ gap: 2 }}>
+              <Text style={home.tileTitle}>{action.title}</Text>
+              <Text style={home.small}>{action.hint}</Text>
             </View>
-            <Text style={home.utilityTitle}>{action.title}</Text>
-            <Text style={home.small}>{action.hint}</Text>
           </FocusPressable>
         ))}
-      </View>
-      <View style={{ gap: 12 }}>
-        <View style={home.sectionHeading}>
-          <Text style={home.sectionTitle}>Around campus</Text>
-          <Ionicons name="location-outline" size={19} color={C.muted} />
-        </View>
+      </Reveal>
+      <Reveal index={3} style={{ gap: 10 }}>
+        <SectionLabel>Around campus</SectionLabel>
         <FocusPressable
           accessibilityRole="button"
           accessibilityLabel="Open campus map"
           accessibilityHint="View reported concerns and map details."
           onPress={() => navigate("Map")}
+          pressScale={0.985}
           style={home.mapPreview}
         >
           <View
@@ -198,40 +222,32 @@ export default function Home({
             />
           </View>
           <View style={home.mapFooter}>
-            <View style={{ flex: 1, gap: 5 }}>
+            <View style={{ flex: 1, gap: 2 }}>
               <Text style={s.label}>Campus map</Text>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <View
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: 4,
-                    backgroundColor: C.blue,
-                  }}
-                />
-                <Text style={home.small}>
-                  {reports.error
-                    ? "Preview updates unavailable"
-                    : reports.loading
-                      ? "Loading reports…"
-                      : "Reported concerns"}
-                </Text>
-              </View>
+              <Text style={home.small}>
+                {reports.error
+                  ? "Preview updates unavailable"
+                  : reports.loading
+                    ? "Loading reports…"
+                    : previewPins.length
+                      ? previewPins.length +
+                        (previewPins.length === 1
+                          ? " open concern"
+                          : " open concerns")
+                      : "No open concerns reported"}
+              </Text>
             </View>
-            <View style={home.mapArrow}>
-              <Ionicons name="arrow-forward" size={20} color={C.blue} />
-            </View>
+            <Ionicons name="chevron-forward" size={20} color={C.blue} />
           </View>
         </FocusPressable>
-      </View>
+      </Reveal>
+      {loadingHome && <Pulse style={{ height: 44 }} />}
       {!!activeWalk && !walkStatus(activeWalk, now).recent && (
         <Notice message="Your shared position may be outdated. Open your walk to check updates." />
       )}
       {currentAlerts.length > 0 && (
         <Disclosure
-          compact
+          icon="megaphone-outline"
           title={"Campus updates (" + currentAlerts.length + ")"}
         >
           {currentAlerts.map((a) => (
@@ -245,7 +261,7 @@ export default function Home({
           ))}
         </Disclosure>
       )}
-      <Text style={s.small}>
+      <Text style={[s.small, { marginTop: 4 }]}>
         In immediate danger? Call your local emergency number. SafelyGo does not
         dispatch help.
       </Text>
@@ -254,64 +270,95 @@ export default function Home({
 }
 
 const home = StyleSheet.create({
-  greeting: { gap: 6, marginBottom: 2 },
+  greeting: { gap: 2, marginBottom: 2 },
+  campusName: { fontSize: 13, fontWeight: "600", color: C.muted },
   title: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: "700",
-    letterSpacing: -0.4,
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: "800",
+    letterSpacing: -0.6,
     color: C.ink,
   },
-  walkAction: {
-    backgroundColor: "#EEF4FF",
-    borderWidth: 1,
-    borderColor: "#DCE7FA",
-    borderRadius: 20,
-    padding: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    minHeight: 108,
-  },
-  walkIcon: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+  hero: {
     backgroundColor: C.blue,
-    justifyContent: "center",
-    alignItems: "center",
+    borderRadius: 22,
+    padding: 22,
+    gap: 18,
+    overflow: "hidden",
   },
-  walkTitle: {
-    fontSize: 20,
-    lineHeight: 27,
-    fontWeight: "700",
-    color: C.ink,
-  },
-  walkHint: { fontSize: 13, lineHeight: 20, color: C.muted },
-  walkArrow: {
+  heroTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  heroIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: C.blue,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
-  sectionHeading: {
+  livePill: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
-  sectionTitle: {
-    fontSize: 18,
-    lineHeight: 25,
-    fontWeight: "700",
-    color: C.ink,
+  livePillText: { fontSize: 12, fontWeight: "700", color: C.white },
+  heroTitle: {
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+    color: C.white,
   },
+  heroHint: { fontSize: 14, lineHeight: 20, color: "#DCE7FB", maxWidth: 300 },
+  heroCta: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    backgroundColor: C.white,
+  },
+  heroCtaText: { fontSize: 15, fontWeight: "700", color: C.blue },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.blue,
+  },
+  incoming: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    minHeight: 56,
+    borderRadius: 14,
+    backgroundColor: C.mint,
+    borderWidth: 1,
+    borderColor: C.accent,
+  },
+  actionGrid: { flexDirection: "row", gap: 12 },
+  tile: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 18,
+    gap: 14,
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.line,
+    minHeight: 124,
+  },
+  tileTitle: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: C.ink },
   mapPreview: {
     borderRadius: 18,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: C.line,
+    backgroundColor: C.white,
   },
   mapFooter: {
     padding: 14,
@@ -320,32 +367,5 @@ const home = StyleSheet.create({
     gap: 12,
     backgroundColor: C.white,
   },
-  mapArrow: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: C.mint,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionGrid: { flexDirection: "row", gap: 12 },
-  utilityAction: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 16,
-    gap: 8,
-    backgroundColor: C.white,
-    borderWidth: 1,
-    borderColor: C.line,
-    minHeight: 120,
-  },
-  helpAction: { backgroundColor: C.white },
-  utilityIcon: { height: 36, justifyContent: "center" },
-  utilityTitle: {
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: "700",
-    color: C.ink,
-  },
-  small: { fontSize: 12, lineHeight: 18, color: C.muted },
+  small: { fontSize: 12, lineHeight: 17, color: C.muted },
 });
